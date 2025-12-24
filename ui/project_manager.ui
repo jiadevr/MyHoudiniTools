@@ -165,7 +165,7 @@ background-color: rgb(100, 50, 100);
         <widget class="QListWidget" name="lw_seq"/>
        </item>
        <item>
-        <widget class="QPushButton" name="create_scene">
+        <widget class="QPushButton" name="bt_create_scene">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -178,7 +178,7 @@ background-color: rgb(100, 50, 100);
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="delete_scene">
+        <widget class="QPushButton" name="bt_delete_scene">
          <property name="minimumSize">
           <size>
            <width>0</width>
