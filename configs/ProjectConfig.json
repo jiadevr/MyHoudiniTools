@@ -1,0 +1,10 @@
+[
+    {
+        "Test1": {
+            "fps": "30",
+            "projectCode": "Test1",
+            "projectFolders": "geo, hda, sim, abc, tex, render, flip, scripts, comp, audio, video, desk, cache, seq, assets",
+            "projectPath": "D:/HoudiniProject\\Test1"
+        }
+    }
+]
