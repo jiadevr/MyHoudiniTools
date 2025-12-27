@@ -208,8 +208,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             self._RaiseAMessage_("Please Select A Project First",hou.severityType.Error)
             return
         
-        project_dir:str=project_data["projectPath"]
-        project_dir.replace(os.sep,"/")
+        project_dir:str=project_data["projectPath"].replace(os.sep,"/")
         print(project_dir)
         
         if not os.path.exists(project_dir):
@@ -242,8 +241,36 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.RefreshSceneList()
 
     def DeleteScene(self):
+        target_project,project_data= self.GetSelectedProject()
+        if target_project==None:
+            self._RaiseAMessage_("Please Select A Project First",hou.severityType.Error)
+            return
+        
+        project_seq_dir:str=os.path.join(project_data["projectPath"],"seq/").replace(os.sep,"/")
+        print(f"Target Dir:{project_seq_dir}")
+        
+        if not os.path.exists(project_seq_dir):
+            self._RaiseAMessage_(f"Give Project{target_project} 's Paths {project_seq_dir} Doesn't Existed",hou.severityType.Error)
+            return
+        
+        selected_scene=self.lw_seq.currentItem().text()
+        print(f"Current Select Seq Name: {selected_scene}")
+        selected_scene=os.path.join(project_seq_dir,selected_scene).replace(os.path.sep,"/")
 
-        pass
+        if not os.path.exists(selected_scene):
+            self._RaiseAMessage_(f"Target Path {selected_scene} Doesn't Existed",hou.severityType.Error)
+            return
+
+        user_input=hou.ui.displayMessage(f"Would You Like Delete All Files In {selected_scene}",buttons=("OK","Cancel"),severity=hou.severityType.Warning)
+
+        if user_input!=0:
+            self._RaiseAMessage_(f"Cancel Delete By User Choice")
+            return
+        
+        shutil.rmtree(selected_scene)
+        self.RefreshSceneList()
+        return
+
 
     def OpenFile(self):
 
