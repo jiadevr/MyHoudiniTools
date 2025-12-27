@@ -58,6 +58,7 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.create_scene.clicked.connect(self.CreateScene)
         self.delete_scene.clicked.connect(self.DeleteScene)
 
+        self.lw_seq.currentItemChanged.connect(self.RefreshFiles)
         self.open_file.clicked.connect(self.OpenFile)
         self.save_file.clicked.connect(self.SaveFile)
     
@@ -75,7 +76,7 @@ class ProjectManager(QtWidgets.QMainWindow):
         '''
         Get Current Selected Project Or Display An Error
         Returns:
-            tuple:(project_name,project_data) pr (None,None) if no selection
+            tuple:(project_name,project_data) or (None,None) if no selection
         '''
         if not self.lw_project.selectedItems:
             self._RaiseAMessage_("Plesae Select A Project",hou.severityType.Error)
@@ -90,6 +91,32 @@ class ProjectManager(QtWidgets.QMainWindow):
         print(f"Current Select Project: {target_name},Info:{project_data}")
         return target_name,project_data
 
+    def GetSelectedScene(self):
+        '''
+        GetCurrent Select Scene Info Or Display An Error
+        Returns:
+            tuple:(SceneName,ScenePath) or (None,None) if no selection
+        '''
+        target_project_name,target_project_info=self.GetSelectedProject()
+        if target_project_name==None:
+            self._RaiseAMessage_("Please Select A Project First",hou.severityType.Error)
+            return None,None
+        
+        project_seq_dir:str=os.path.join(target_project_info["projectPath"],"seq").replace(os.sep,"/")
+        
+        if not os.path.exists(project_seq_dir):
+            self._RaiseAMessage_(f"Give Project{target_project_name} 's Paths {project_seq_dir} Doesn't Existed",hou.severityType.Error)
+            return None,None
+        
+        selected_scene=self.lw_seq.currentItem().text()
+        print(f"Current Select Seq Name: {selected_scene}")
+        selected_scene_dir=os.path.join(project_seq_dir,selected_scene).replace(os.path.sep,"/")
+
+        if not os.path.exists(selected_scene_dir):
+            self._RaiseAMessage_(f"Target Path {selected_scene_dir} Doesn't Existed",hou.severityType.Error)
+            return None,None
+        return selected_scene,selected_scene_dir
+        
 
     def LoadProjectsFromConfig(self):
         '''
@@ -241,40 +268,72 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.RefreshSceneList()
 
     def DeleteScene(self):
-        target_project,project_data= self.GetSelectedProject()
-        if target_project==None:
-            self._RaiseAMessage_("Please Select A Project First",hou.severityType.Error)
+        selected_scene_name,selected_scene_dir= self.GetSelectedScene()
+        if selected_scene_name==None or selected_scene_dir==None or (not os.path.exists(selected_scene_dir)):
+            self._RaiseAMessage_(f"Give Project{selected_scene_name} 's Paths {selected_scene_dir} Doesn't Existed",hou.severityType.Error)
             return
         
-        project_seq_dir:str=os.path.join(project_data["projectPath"],"seq/").replace(os.sep,"/")
-        print(f"Target Dir:{project_seq_dir}")
-        
-        if not os.path.exists(project_seq_dir):
-            self._RaiseAMessage_(f"Give Project{target_project} 's Paths {project_seq_dir} Doesn't Existed",hou.severityType.Error)
-            return
-        
-        selected_scene=self.lw_seq.currentItem().text()
-        print(f"Current Select Seq Name: {selected_scene}")
-        selected_scene=os.path.join(project_seq_dir,selected_scene).replace(os.path.sep,"/")
-
-        if not os.path.exists(selected_scene):
-            self._RaiseAMessage_(f"Target Path {selected_scene} Doesn't Existed",hou.severityType.Error)
-            return
-
-        user_input=hou.ui.displayMessage(f"Would You Like Delete All Files In {selected_scene}",buttons=("OK","Cancel"),severity=hou.severityType.Warning)
+        user_input=hou.ui.displayMessage(f"Would You Like Delete All Files In {selected_scene_name}",buttons=("OK","Cancel"),severity=hou.severityType.Warning)
 
         if user_input!=0:
             self._RaiseAMessage_(f"Cancel Delete By User Choice")
             return
         
-        shutil.rmtree(selected_scene)
+        shutil.rmtree(selected_scene_dir)
         self.RefreshSceneList()
         return
 
+    def RefreshFiles(self):
+        self.lw_files.clear()
+        selected_scene_name,selected_scene_dir= self.GetSelectedScene()
+        if selected_scene_name==None or selected_scene_dir==None or (not os.path.exists(selected_scene_dir)):
+            self._RaiseAMessage_(f"Give Project{selected_scene_name} 's Paths {selected_scene_dir} Doesn't Existed",hou.severityType.Error)
+            return
+        
+        hip_files=[]
+        for dirpath, dirnames, filenames in os.walk(selected_scene_dir):
+            for file_name in filenames:
+                if file_name.endswith((".hip",".hiplc",".hipnc")):
+                    hip_files.append(file_name)
+        if len(hip_files)==0:
+            self._RaiseAMessage_(f"Find None HIP File In {selected_scene_dir}")
+            return
+        hip_files.sort()
+        self.lw_files.addItems(hip_files)
 
     def OpenFile(self):
+        
+        target_hip= self.lw_files.currentItem().text()
+        hip_path=""
+        selected_scene_name,selected_scene_dir= self.GetSelectedScene()
 
-        pass
+        for dirpath, dirnames, filenames in os.walk(selected_scene_dir):
+            for file_name in filenames:
+                print(f"Seraching:{file_name},Target:{target_hip}")
+                if file_name==target_hip:
+                    hip_path=os.path.join(dirpath,file_name).replace(os.path.sep,"/")
+                    print("Find Target Hip")
+                    break
+                else:
+                    print(f"{file_name} Not Match To Target {target_hip}")
+            if hip_path!="":
+                print(f"Find Given Target Hip File: Path Is {hip_path}")
+                break
+        
+        if not os.path.exists(hip_path):
+            self._RaiseAMessage_(f"Fail to Open {target_hip}, Path {hip_path} Doesn't Exist!",hou.severityType.Error)
+            return
+        try:
+            if  hou.hipFile.hasUnsavedChanges():
+                user_choice=hou.ui.displayMessage("Current Scene Has Unsaved Changes,Do You Want to Save Them?",buttons=("OK","No","Cancel"),severity=hou.severityType.Warning)
+                if user_choice==2:
+                    return
+                if user_choice==0:
+                    hou.hipFile.save()
+            
+            hou.hipFile.load(hip_path)
+        except Exception as Error:
+            self._RaiseAMessage_(f"Fail To Open {target_hip},Reason {Error}")
 
     def SaveFile(self):
 
