@@ -25,6 +25,11 @@ class ProjectManager(QtWidgets.QMainWindow):
         # 读取Json信息
         self.LoadProjectsFromConfig()
 
+        # 初始化项目选择
+        avaliable_proj= self._GetFirstEnabledProject_()
+        if avaliable_proj:
+            self.lw_project.setCurrentItem(self.lw_project.findItems(avaliable_proj,QtCore.Qt.MatchFlag.MatchExactly)[0])
+
         # 子窗口引用
         self.save_sub_widget=None
 
@@ -76,6 +81,31 @@ class ProjectManager(QtWidgets.QMainWindow):
             return hou.ui.displayMessage(in_message,severity=in_severity)
         return 0
     
+
+    def _SaveProjectDataToConfig(self):
+        if not self.project_data:
+            self._RaiseAMessage_("Fail To Save Config, Empty project_data")
+        try:
+            with open(self.config_file_path,"w") as file:
+                file.seek(0)
+                file.truncate()
+                json.dump(self.project_data,file,sort_keys=True,indent=4)
+        except Exception as Error:
+            self._RaiseAMessage_(f"Fail To Save Config, Reason:{Error}")
+
+    def _GetFirstEnabledProject_(self):
+        '''
+        Return First Project Which is Enable
+        Return
+            Valid Project Name or None
+        '''
+        if not self.project_data:
+            self._RaiseAMessage_("Empty Project Data",hou.severityType.Error)
+            return None
+        for project in self.project_data:
+            if project[list(project.keys())[0]]["enabled"]==True:
+                return list(project.keys())[0]
+
     def GetSelectedProject(self):
         '''
         Get Current Selected Project Or Display An Error
@@ -162,7 +192,7 @@ class ProjectManager(QtWidgets.QMainWindow):
     def ToggleProjectEnable(self,status=True):
         if not self.lw_project.selectedItems:
             self._RaiseAMessage_("Please Select A Project In Project List",in_severity=hou.severityType.Error)
-        
+        # 设置环境变量
         env_var ={"JOB":"","CODE":"","FPS":"","PROJECT":""}
 
         target_project,project=self.GetSelectedProject()
@@ -174,7 +204,24 @@ class ProjectManager(QtWidgets.QMainWindow):
 
         for key,value in env_var.items():
             hou.putenv(key,value)
-        
+        # 设置启用状态
+        if not self.project_data:
+            self._RaiseAMessage_("Fail To Change Enable State Config, Empty project_data")
+            return
+        if status==True:
+            # 关闭其他项目启用状态
+            for project in self.project_data:
+                if target_project in project:
+                    project[target_project]["enabled"]=True
+                else:
+                    project[list(project.keys())[0]]["enabled"]=False
+        else:
+            for project in self.project_data:
+                if target_project in project:
+                    project[target_project]["enabled"]=False
+                    break
+        self._SaveProjectDataToConfig()
+                
         self._RaiseAMessage_(f"Set  Env Value To{env_var}",bshow_dialog=True)
 
     def DeleteProject(self):
@@ -199,24 +246,18 @@ class ProjectManager(QtWidgets.QMainWindow):
             self._RaiseAMessage_(f"Find Null Project Named {target_project}")
             return
         
-        try:
-            with open(self.config_file_path,"w") as file:
-                file.seek(0)
-                file.truncate()
-                json.dump(self.project_data,file,sort_keys=True,indent=4)
-            # 刷新窗口
-            self.LoadProjectsFromConfig()
-            self._RaiseAMessage_(f"Remove Project {target_project} In Config File")
-            # 删除文件
-            project_dir= project_data["projectPath"]
-            if os.path.exists(project_dir):
-                try:
-                    shutil.rmtree(project_dir)
-                except Exception as Error:
-                    self._RaiseAMessage_(f"Failed To Remove Project {target_project} Files: Reason{Error}",hou.severityType.Error)
+        self._SaveProjectDataToConfig()
+        # 刷新窗口
+        self.LoadProjectsFromConfig()
+        self._RaiseAMessage_(f"Remove Project {target_project} In Config File")
+        # 删除文件
+        project_dir= project_data["projectPath"]
+        if os.path.exists(project_dir):
+            try:
+                shutil.rmtree(project_dir)
+            except Exception as Error:
+                self._RaiseAMessage_(f"Failed To Remove Project {target_project} Files: Reason{Error}",hou.severityType.Error)
                                 
-        except Exception as Error:
-            self._RaiseAMessage_(f"Failed To Remove Project {target_project} Reason{Error}")
         
     def RefreshSceneList(self):
         self.lw_seq.clear()
@@ -306,7 +347,9 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.lw_files.addItems(hip_files)
 
     def OpenFile(self):
-        
+        if self.lw_files.currentItem()==None:
+            self._RaiseAMessage_("Please Select A File To Open",hou.severityType.Error)
+            return
         target_hip= self.lw_files.currentItem().text()
         hip_path=""
         selected_scene_name,selected_scene_dir= self.GetSelectedScene()
