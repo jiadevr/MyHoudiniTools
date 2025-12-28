@@ -7,10 +7,22 @@
 
   <toolshelf name="mytools" label="MyTools">
     <memberTool name="reloadmoudles"/>
+    <memberTool name="createproject"/>
+    <memberTool name="projectmanager"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[import my_houdini_utils
 my_houdini_utils.reloadPackageAndModules()]]></script>
+  </tool>
+
+  <tool name="createproject" label="ProjectCreator" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.ProjectCreator
+tools.ProjectCreator.ShowProjectGeneratorWidget()]]></script>
+  </tool>
+
+  <tool name="projectmanager" label="Project Manager" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.ProjectManager
+tools.ProjectManager.ShowProjectManagerWidget()]]></script>
   </tool>
 </shelfDocument>

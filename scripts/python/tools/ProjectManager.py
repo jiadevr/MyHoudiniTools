@@ -4,6 +4,7 @@ import json
 import shutil
 
 from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
+from SaveTools import SaveToolWindow
 
 class ProjectManager(QtWidgets.QMainWindow):
     # CLASS Constant
@@ -23,6 +24,9 @@ class ProjectManager(QtWidgets.QMainWindow):
         
         # 读取Json信息
         self.LoadProjectsFromConfig()
+
+        # 子窗口引用
+        self.save_sub_widget=None
 
     def _InitialUI_(self):
         '''
@@ -336,8 +340,27 @@ class ProjectManager(QtWidgets.QMainWindow):
             self._RaiseAMessage_(f"Fail To Open {target_hip},Reason {Error}")
 
     def SaveFile(self):
+        # 是否选中对应内容
+        selected_proj_name,project_data=self.GetSelectedProject()
+        selected_scene_name,selected_scene_dir=self.GetSelectedScene()
+        if selected_scene_name==None or selected_scene_dir==None:
+            self._RaiseAMessage_("Please Select A Seq In Project",hou.severityType.Error)
+            return
+        
+        self._RaiseAMessage_(f"Ready To Save {selected_proj_name}-{selected_scene_name}")
+        # 创建实例
+        if not self.save_sub_widget:
+            self.save_sub_widget=SaveToolWindow(selected_scene_dir,selected_proj_name,selected_scene_name)
+        else:
+            self.save_sub_widget.scene_dir=selected_scene_dir
+            self.save_sub_widget.project_name=selected_proj_name
+            self.save_sub_widget.seq_name=selected_scene_name
 
-        pass
+        self.save_sub_widget
+        #展示实例    
+        self.save_sub_widget.show()
+        self.save_sub_widget.raise_()
 
-window_gui=ProjectManager()
-window_gui.show()
+def ShowProjectManagerWidget():
+    window_gui=ProjectManager()
+    window_gui.show()

@@ -5,7 +5,7 @@ import json
 
 from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
 
-class ProjectGenerator(QtWidgets.QMainWindow):
+class ProjectCreator(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         
@@ -128,5 +128,6 @@ class ProjectGenerator(QtWidgets.QMainWindow):
 
         hou.ui.displayMessage(f"Create Project {user_project_name} Successfully")
 
-window_gui=ProjectGenerator()
-window_gui.show()
+def ShowProjectGeneratorWidget():
+    window_gui=ProjectCreator()
+    window_gui.show()

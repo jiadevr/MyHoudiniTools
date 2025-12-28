@@ -11,7 +11,7 @@ def reloadPackageAndModules():
 
     #重新加载模块，对应json文件指向的个人库，其中$MYLIB是json中定义的个人库路径
     modules_dir=hou.text.expandString("$MYLIB/scripts/python")
-    print(sys.modules)
+    #print(sys.modules)
     #函数返回多个元组、每个文件夹对应一个元组，算组三个元素分别表示当前路径、当前路径下文件夹名称、当前路径下文件名称
     for dirpath, dirnames, filenames in os.walk(modules_dir):
         #print(f"DirPath={dirpath},DirName={dirnames},FileNames={filenames}")
