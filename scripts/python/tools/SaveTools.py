@@ -5,6 +5,18 @@ import glob
 from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
 
 class SaveToolWindow(QtWidgets.QWidget):
+    #Qt信号槽
+    onSaveFinished=QtCore.Signal()
+    STAGES=["MAIN","DEV","WIP"]
+    DEPARTMENT=["GEN","ANIM","CFX","ENV","FX","LRC","RIG","LAYOUT"]
+    LISCENSE_MAP={
+        "Commercial":"hip",
+        "Indie":"hiplc",
+        "Apprentice":"hipnc",
+        "ApprenticeHD":"hipnc",
+        "Education":"hipnc"
+    }
+
     def __init__(self,in_scene_dir=None,in_project_name=None,in_seq_name=None) -> None:
         super().__init__()
         # 基础窗口设置
@@ -37,11 +49,11 @@ class SaveToolWindow(QtWidgets.QWidget):
         # 定义下拉框
         self.stage_combo=QtWidgets.QComboBox()
         self.stage_combo.setMinimumHeight(25)
-        self.stage_combo.addItems(["MAIN","DEV","WIP"])
+        self.stage_combo.addItems(self.STAGES)
 
         self.department_combo=QtWidgets.QComboBox()
         self.department_combo.setMinimumHeight(25)
-        self.department_combo.addItems(["GEN","ANIM","CFX","ENV","FX","LRC","RIG","LAYOUT"])
+        self.department_combo.addItems(self.DEPARTMENT)
         # 定义输入框
         self.file_name_input=QtWidgets.QLineEdit()
         self.file_name_input.setMinimumHeight(25)
@@ -82,6 +94,10 @@ class SaveToolWindow(QtWidgets.QWidget):
         self.project_label.setText(f"Target Project:{self.project_name},Target Seq:{self.seq_name}")
         self.status_lable.setText(f"Current Path:{self.scene_dir}")
 
+    def RefreshWidget(self):
+        self._init_tints_()
+        self.file_name_input.clear()
+
     def RefreshSavePath(self):
 
         user_input_file_name=self.file_name_input.text().replace(" ","_").strip() or "Unnamed"
@@ -117,20 +133,24 @@ class SaveToolWindow(QtWidgets.QWidget):
         return 1
 
     def GetFileExtension(self)->str:
-        license_extension_map={
-            "Commercial":"hip",
-            "Indie":"hiplc",
-            "Apprentice":"hipnc",
-            "ApprenticeHD":"hipnc",
-            "Education":"hipnc"
-        }
+
         user_license=hou.licenseCategory().name()
-        return license_extension_map[user_license]
+        return self.LISCENSE_MAP[user_license]
 
     def SaveProj(self):
+        # 检查前置路径是否存在
+        if not os.path.exists(self.scene_dir):
+            os.makedirs(self.scene_dir)
         try:
             hou.hipFile.save(self.save_path)
+            hou.ui.displayMessage(f"success Save hip File To {self.scene_dir}")
             self.status_lable.setText("Finish Save hip File")
+            #Qt信号槽
+            self.onSaveFinished.emit()
+        except PermissionError:
+            hou.ui.displayMessage(f"Fail to Save hip File,Reason: Permission Denied")
+        except OSError:
+            hou.ui.displayMessage(f"Fail to Save hip File,Reason: OS Error,Target Path:{self.save_path}")
         except Exception as Error:
             hou.ui.displayMessage(f"Fail to Save hip File,Reason:{Error}")
 

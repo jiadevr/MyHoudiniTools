@@ -396,15 +396,20 @@ class ProjectManager(QtWidgets.QMainWindow):
         # 创建实例
         if not self.save_sub_widget:
             self.save_sub_widget=SaveToolWindow(selected_scene_dir,selected_proj_name,selected_scene_name)
+            self.save_sub_widget.onSaveFinished.connect(self.OnSaveHipFinished)
         else:
             self.save_sub_widget.scene_dir=selected_scene_dir
             self.save_sub_widget.project_name=selected_proj_name
             self.save_sub_widget.seq_name=selected_scene_name
 
-        self.save_sub_widget
+        self.save_sub_widget.RefreshWidget()
         #展示实例    
         self.save_sub_widget.show()
         self.save_sub_widget.raise_()
+
+    def OnSaveHipFinished(self):
+        self._RaiseAMessage_("Save Hip File Success")
+        self.RefreshFiles()
 
 def ShowProjectManagerWidget():
     window_gui=ProjectManager()
