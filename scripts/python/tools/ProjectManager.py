@@ -4,7 +4,7 @@ import json
 import shutil
 
 from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
-from SaveTools import SaveToolWindow
+from tools.SaveTools import SaveToolWindow
 
 class ProjectManager(QtWidgets.QMainWindow):
     # CLASS Constant
@@ -122,7 +122,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             if target_name in project:
                 project_data=project[target_name]
                 break
-        print(f"Current Select Project: {target_name},Info:{project_data}")
+        #print(f"Current Select Project: {target_name},Info:{project_data}")
         return target_name,project_data
 
     def GetSelectedScene(self):
@@ -141,7 +141,9 @@ class ProjectManager(QtWidgets.QMainWindow):
         if not os.path.exists(project_seq_dir):
             self._RaiseAMessage_(f"Give Project{target_project_name} 's Paths {project_seq_dir} Doesn't Existed",hou.severityType.Error)
             return None,None
-        
+        if self.lw_seq.count()<=0:
+            self._RaiseAMessage_(f"Please Select A Seq",hou.severityType.Error)
+            return
         selected_scene=self.lw_seq.currentItem().text()
         print(f"Current Select Seq Name: {selected_scene}")
         selected_scene_dir=os.path.join(project_seq_dir,selected_scene).replace(os.path.sep,"/")
