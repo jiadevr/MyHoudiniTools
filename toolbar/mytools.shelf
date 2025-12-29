@@ -9,6 +9,7 @@
     <memberTool name="reloadmoudles"/>
     <memberTool name="createproject"/>
     <memberTool name="projectmanager"/>
+    <memberTool name="scene_cache_manager"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -24,5 +25,10 @@ tools.ProjectCreator.ShowProjectGeneratorWidget()]]></script>
   <tool name="projectmanager" label="Project Manager" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[import tools.ProjectManager
 tools.ProjectManager.ShowProjectManagerWidget()]]></script>
+  </tool>
+
+  <tool name="scene_cache_manager" label="SceneCacheManager" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.CacheManager
+tools.CacheManager.ShowSceneCacheWidget()]]></script>
   </tool>
 </shelfDocument>
