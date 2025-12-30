@@ -63,23 +63,22 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
                     if not cache_path:
                         continue
                     last_modified_str=self._get_last_modify_time(cache_path)
-                    cache_path=self._convert_to_relative_path(cache_path)
+                    total_version_count=self._get_total_version_count_(cache_path)
+                    relative_path=self._convert_to_relative_path(cache_path)
                     node_name,node_path,node_type_real= self._get_node_base_info_(single_cache_node)
                     node_data={
                         "node_name":node_name,
                         "node_path":node_path,
                         "node_type":node_type_real,
-                        "cache_path":cache_path,
+                        "cache_path":relative_path,
                         "current_version":self._get_current_version_(node_path),
-                        "other_versions":"other",
+                        "other_versions":str(total_version_count),
                         "lastmodified":last_modified_str,
                         "total_size":"size"
                     }
                     self._add_to_tree(node_data)
 
                 
-
-
     def _add_to_tree(self,in_node_data:dict):
         item=QtWidgets.QTreeWidgetItem(self.cache_tree)
         data_keys=list(in_node_data.keys())
@@ -116,11 +115,11 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
     def _convert_to_relative_path(self,in_absolute_path:str)->str:
         project_path=hou.text.expandString("$HIP")
         if not os.path.exists(project_path):
-            print("Env $HIP Not Exist")
+            #print("Env $HIP Not Exist")
             return in_absolute_path
         relative_path=in_absolute_path
         if in_absolute_path.startswith(project_path):
-            print(f"Replace {project_path} with $HIP")
+            #print(f"Replace {project_path} with $HIP")
             relative_path = in_absolute_path.replace(project_path,"$HIP")
         return relative_path
 
@@ -135,8 +134,27 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
         except:
             return "N/A"
 
-    def _get_other_version_count_(self):
-        pass
+    def _get_total_version_count_(self,in_cache_dir:str)->int:
+        '''
+        获取缓存路径中历史版本数量，返回int
+        
+        :param in_cache_dir:缓存文件路径
+        '''
+        if not os.path.exists(in_cache_dir):
+            return 0
+        # 先切分文件名和所在路径，再使用dirname返回上一层
+        cache_parent_dir=os.path.dirname(os.path.split(in_cache_dir)[0])
+        version =[]
+        for item in os.listdir(cache_parent_dir):
+            #它本质上是利用特殊文件结构查询文件夹，文件夹以v版本号为名称
+            if os.path.isdir(os.path.join(cache_parent_dir,item)) and item.startswith("v"):
+                try:
+                    # 切片器，去除v
+                    version_num=int(item[1:])
+                    version.append(version_num)
+                except:
+                    continue
+        return len(version)
 
     def _get_last_modify_time(self,in_file_path:str)->str:
         if os.path.exists(in_file_path):
