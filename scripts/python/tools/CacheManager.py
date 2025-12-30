@@ -1,18 +1,15 @@
 import hou
 import os
+import datetime
 from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
 
 class SceneCacheManagerUI(QtWidgets.QMainWindow):
     # 节点类型和输出数据路径配置的属性名称
     CACHE_NODES={
-        "filecache":"sopoutput",
         "rop_geometry":"sopoutput",
         "rop_alembic":"filename",
         "rop_fbx":"sopoutput",
-        "rop_dop":"dopoutput",
-        "vellumio":"sopoutput",
-        "rbdio":"sopoutput",
-        "kinefx::characterio":"sopoutput"
+        "rop_dop":"dopoutput"
     }
 
     def __init__(self) -> None:
@@ -56,7 +53,7 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
         # Scan All Node，前边列举过所有种类的节点和他们输出属性的名称
         for node_type,output_property in self.CACHE_NODES.items():
             # 下面两行要一起理解，hou.nodeType需要输入一个category，对应的就是hou.sopNodeTypeCategory()，使用数组方便扩展更多Net的数据
-            for category in [hou.sopNodeTypeCategory()]:
+            for category in [hou.sopNodeTypeCategory(),hou.dopNodeTypeCategory(),hou.ropNodeTypeCategory()]:
                 node_type_in_category=hou.nodeType(category,node_type)
                 if not node_type_in_category:
                     continue
@@ -65,14 +62,17 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
                     cache_path=single_cache_node.parm(output_property).eval()
                     if not cache_path:
                         continue
+                    last_modified_str=self._get_last_modify_time(cache_path)
+                    cache_path=self._convert_to_relative_path(cache_path)
+                    node_name,node_path,node_type_real= self._get_node_base_info_(single_cache_node)
                     node_data={
-                        "node_name":"name",
-                        "node_path":"path",
-                        "node_type":"type",
-                        "cache_path":"cache",
-                        "current_version":"version",
+                        "node_name":node_name,
+                        "node_path":node_path,
+                        "node_type":node_type_real,
+                        "cache_path":cache_path,
+                        "current_version":self._get_current_version_(node_path),
                         "other_versions":"other",
-                        "lastmodified":"last",
+                        "lastmodified":last_modified_str,
                         "total_size":"size"
                     }
                     self._add_to_tree(node_data)
@@ -86,6 +86,65 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
         for i in range(len(data_keys)):
            # print(data_keys[i])
            item.setText(i,in_node_data[data_keys[i]])
+
+
+    def _get_node_base_info_(self,in_node:hou.Node):
+        '''
+        Return the Correct Node Details-name,path,type
+        
+        :param self: Description
+        :param in_node: Description
+        :type in_node: hou.Node
+        Return
+            tuple- Name,Path,type in Str
+        '''
+        node_name=in_node.name()
+        node_path=in_node.path()
+        node_type=in_node.type().name()
+        check_parent=in_node.parent()
+        # 临时解决方案
+        if node_name=="render" and check_parent.name()=="filecache":
+            node_name=in_node.parent().parent().name()
+            node_path=in_node.parent().parent().path()
+            node_type=in_node.parent().parent().type().name()
+        elif node_name=="render":
+            node_name=in_node.parent().name()
+            node_path=in_node.parent().path()
+            node_type=in_node.parent().type().name()
+        return node_name,node_path,node_type
+
+    def _convert_to_relative_path(self,in_absolute_path:str)->str:
+        project_path=hou.text.expandString("$HIP")
+        if not os.path.exists(project_path):
+            print("Env $HIP Not Exist")
+            return in_absolute_path
+        relative_path=in_absolute_path
+        if in_absolute_path.startswith(project_path):
+            print(f"Replace {project_path} with $HIP")
+            relative_path = in_absolute_path.replace(project_path,"$HIP")
+        return relative_path
+
+
+    def _get_current_version_(self,in_node_path:str)->str:
+        #这里有不明原因必须这么做，传入Node即使调用Node.path()也无法获取对应值
+        target_node:hou.OpNode=hou.node(in_node_path)
+        try:
+            version=target_node.parm("version").eval()
+            #print(type(target_node.parm("version")))
+            return str(version) if version else "N/A"
+        except:
+            return "N/A"
+
+    def _get_other_version_count_(self):
+        pass
+
+    def _get_last_modify_time(self,in_file_path:str)->str:
+        if os.path.exists(in_file_path):
+            time_stamp=os.path.getmtime(in_file_path)
+            timestr= datetime.datetime.fromtimestamp(time_stamp).strftime("%d/%m/%Y, %H:%M")
+            return timestr
+        else:
+            return "--"
 
 def ShowSceneCacheWidget():
     win=SceneCacheManagerUI()
