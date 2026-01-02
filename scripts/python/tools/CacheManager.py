@@ -1,43 +1,62 @@
 import hou
 import os
 import datetime
-from PySide6 import QtCore,QtUiTools,QtWidgets,QtGui
+from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
+
 
 class SceneCacheManagerUI(QtWidgets.QMainWindow):
     # 节点类型和输出数据路径配置的属性名称
-    CACHE_NODES={
-        "rop_geometry":"sopoutput",
-        "rop_alembic":"filename",
-        "rop_fbx":"sopoutput",
-        "rop_dop":"dopoutput"
+    CACHE_NODES = {
+        "rop_geometry": "sopoutput",
+        "rop_alembic": "filename",
+        "rop_fbx": "sopoutput",
+        "rop_dop": "dopoutput",
     }
 
     def __init__(self) -> None:
         super().__init__()
-        ui_path=hou.text.expandString("$MYLIB")+"/ui/scene_cache_manager.ui"
+        ui_path = hou.text.expandString("$MYLIB") + "/ui/scene_cache_manager.ui"
         print(ui_path)
-        self.ui=QtUiTools.QUiLoader().load(ui_path,parentWidget=self)
-        self.setParent(hou.qt.mainWindow(),QtCore.Qt.Window)
+        self.ui = QtUiTools.QUiLoader().load(ui_path, parentWidget=self)
+        self.setParent(hou.qt.mainWindow(), QtCore.Qt.Window)
         self.setWindowTitle("Scene Cache Manager")
         self.setMinimumWidth(1200)
 
         self._init_ui_()
         self._init_bindings_()
-        self.cache_data=[]
+        self.cache_data = []
 
     def _init_ui_(self):
-        self.cache_tree:QtWidgets.QTreeWidget=self.ui.findChild(QtWidgets.QTreeWidget,"cache_tree")
-        self.total_node:QtWidgets.QLabel=self.ui.findChild(QtWidgets.QLabel,"lb_total_nodes")
-        self.total_size:QtWidgets.QLabel=self.ui.findChild(QtWidgets.QLabel,"lb_total_size")
-        self.unused_versions:QtWidgets.QLabel=self.ui.findChild(QtWidgets.QLabel,"lb_unused_versions")
-        self.cleanup_button:QtWidgets.QPushButton=self.ui.findChild(QtWidgets.QPushButton,"bt_cleanup")
-        self.explorer_button:QtWidgets.QPushButton=self.ui.findChild(QtWidgets.QPushButton,"bt_reveal")
-        self.scan_button:QtWidgets.QPushButton=self.ui.findChild(QtWidgets.QPushButton,"bt_scan")
+        self.cache_tree: QtWidgets.QTreeWidget = self.ui.findChild(
+            QtWidgets.QTreeWidget, "cache_tree"
+        )
+        self.total_node: QtWidgets.QLabel = self.ui.findChild(
+            QtWidgets.QLabel, "lb_total_nodes"
+        )
+        self.total_size: QtWidgets.QLabel = self.ui.findChild(
+            QtWidgets.QLabel, "lb_total_size"
+        )
+        self.unused_versions: QtWidgets.QLabel = self.ui.findChild(
+            QtWidgets.QLabel, "lb_unused_versions"
+        )
+        self.cleanup_button: QtWidgets.QPushButton = self.ui.findChild(
+            QtWidgets.QPushButton, "bt_cleanup"
+        )
+        self.explorer_button: QtWidgets.QPushButton = self.ui.findChild(
+            QtWidgets.QPushButton, "bt_reveal"
+        )
+        self.scan_button: QtWidgets.QPushButton = self.ui.findChild(
+            QtWidgets.QPushButton, "bt_scan"
+        )
+
+        self.cache_tree.setSortingEnabled(True)
 
     def _init_bindings_(self):
         self.cleanup_button.clicked.connect(self.CleanUp)
         self.explorer_button.clicked.connect(self.OpenExplorer)
         self.scan_button.clicked.connect(self.ScanScene)
+
+        self.cache_tree.itemDoubleClicked.connect(self._focus_on_node_)
 
     def CleanUp(self):
         pass
@@ -47,123 +66,167 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
 
     def ScanScene(self):
         self.cache_tree.clear()
-        self.cache_data=[]
+        self.cache_data = []
         print("Scan Button Was Clicked")
 
         # Scan All Node，前边列举过所有种类的节点和他们输出属性的名称
-        for node_type,output_property in self.CACHE_NODES.items():
+        for node_type, output_property in self.CACHE_NODES.items():
             # 下面两行要一起理解，hou.nodeType需要输入一个category，对应的就是hou.sopNodeTypeCategory()，使用数组方便扩展更多Net的数据
-            for category in [hou.sopNodeTypeCategory(),hou.dopNodeTypeCategory(),hou.ropNodeTypeCategory()]:
-                node_type_in_category=hou.nodeType(category,node_type)
+            for category in [
+                hou.sopNodeTypeCategory(),
+                hou.dopNodeTypeCategory(),
+                hou.ropNodeTypeCategory(),
+            ]:
+                node_type_in_category = hou.nodeType(category, node_type)
                 if not node_type_in_category:
                     continue
-                cache_nodes=node_type_in_category.instances()
+                cache_nodes = node_type_in_category.instances()
                 for single_cache_node in cache_nodes:
-                    cache_path=single_cache_node.parm(output_property).eval()
+                    cache_path = single_cache_node.parm(output_property).eval()
                     if not cache_path:
                         continue
-                    last_modified_str=self._get_last_modify_time(cache_path)
-                    total_version_count=self._get_total_version_count_(cache_path)
-                    relative_path=self._convert_to_relative_path(cache_path)
-                    node_name,node_path,node_type_real= self._get_node_base_info_(single_cache_node)
-                    node_data={
-                        "node_name":node_name,
-                        "node_path":node_path,
-                        "node_type":node_type_real,
-                        "cache_path":relative_path,
-                        "current_version":self._get_current_version_(node_path),
-                        "other_versions":str(total_version_count),
-                        "lastmodified":last_modified_str,
-                        "total_size":"size"
+                    last_modified_str = self._get_last_modify_time_(cache_path)
+                    total_version_count = self._get_total_version_count_(cache_path)
+                    relative_path = self._convert_to_relative_path(cache_path)
+                    node_name, node_path, node_type_real = self._get_node_base_info_(
+                        single_cache_node
+                    )
+                    node_data = {
+                        "node_name": node_name,
+                        "node_path": node_path,
+                        "node_type": node_type_real,
+                        "cache_path": relative_path,
+                        "current_version": self._get_current_version_(node_path),
+                        "other_versions": str(total_version_count),
+                        "lastmodified": last_modified_str,
+                        "total_size": "size",
                     }
                     self._add_to_tree(node_data)
 
-                
-    def _add_to_tree(self,in_node_data:dict):
-        item=QtWidgets.QTreeWidgetItem(self.cache_tree)
-        data_keys=list(in_node_data.keys())
+    def _add_to_tree(self, in_node_data: dict):
+        item = QtWidgets.QTreeWidgetItem(self.cache_tree)
+        data_keys = list(in_node_data.keys())
         for i in range(len(data_keys)):
-           # print(data_keys[i])
-           item.setText(i,in_node_data[data_keys[i]])
+            # print(data_keys[i])
+            item.setText(i, in_node_data[data_keys[i]])
 
-
-    def _get_node_base_info_(self,in_node:hou.Node):
-        '''
+    def _get_node_base_info_(self, in_node: hou.Node):
+        """
         Return the Correct Node Details-name,path,type
-        
+
         :param self: Description
         :param in_node: Description
         :type in_node: hou.Node
         Return
             tuple- Name,Path,type in Str
-        '''
-        node_name=in_node.name()
-        node_path=in_node.path()
-        node_type=in_node.type().name()
-        check_parent=in_node.parent()
+        """
+        node_name = in_node.name()
+        node_path = in_node.path()
+        node_type = in_node.type().name()
+        check_parent = in_node.parent()
         # 临时解决方案
-        if node_name=="render" and check_parent.name()=="filecache":
-            node_name=in_node.parent().parent().name()
-            node_path=in_node.parent().parent().path()
-            node_type=in_node.parent().parent().type().name()
-        elif node_name=="render":
-            node_name=in_node.parent().name()
-            node_path=in_node.parent().path()
-            node_type=in_node.parent().type().name()
-        return node_name,node_path,node_type
+        if node_name == "render" and check_parent.name() == "filecache":
+            node_name = in_node.parent().parent().name()
+            node_path = in_node.parent().parent().path()
+            node_type = in_node.parent().parent().type().name()
+        elif node_name == "render":
+            node_name = in_node.parent().name()
+            node_path = in_node.parent().path()
+            node_type = in_node.parent().type().name()
+        return node_name, node_path, node_type
 
-    def _convert_to_relative_path(self,in_absolute_path:str)->str:
-        project_path=hou.text.expandString("$HIP")
+    def _convert_to_relative_path(self, in_absolute_path: str) -> str:
+        project_path = hou.text.expandString("$HIP")
         if not os.path.exists(project_path):
-            #print("Env $HIP Not Exist")
+            # print("Env $HIP Not Exist")
             return in_absolute_path
-        relative_path=in_absolute_path
+        relative_path = in_absolute_path
         if in_absolute_path.startswith(project_path):
-            #print(f"Replace {project_path} with $HIP")
-            relative_path = in_absolute_path.replace(project_path,"$HIP")
+            # print(f"Replace {project_path} with $HIP")
+            relative_path = in_absolute_path.replace(project_path, "$HIP")
         return relative_path
 
-
-    def _get_current_version_(self,in_node_path:str)->str:
-        #这里有不明原因必须这么做，传入Node即使调用Node.path()也无法获取对应值
-        target_node:hou.OpNode=hou.node(in_node_path)
+    def _get_current_version_(self, in_node_path: str) -> str:
+        # 这里有不明原因必须这么做，传入Node即使调用Node.path()也无法获取对应值
+        target_node: hou.OpNode = hou.node(in_node_path)
         try:
-            version=target_node.parm("version").eval()
-            #print(type(target_node.parm("version")))
+            version = target_node.parm("version").eval()
+            # print(type(target_node.parm("version")))
             return str(version) if version else "N/A"
         except:
             return "N/A"
 
-    def _get_total_version_count_(self,in_cache_dir:str)->int:
-        '''
+    def _get_total_version_count_(self, in_cache_dir: str) -> int:
+        """
         获取缓存路径中历史版本数量，返回int
-        
+
         :param in_cache_dir:缓存文件路径
-        '''
+        """
         if not os.path.exists(in_cache_dir):
             return 0
         # 先切分文件名和所在路径，再使用dirname返回上一层
-        cache_parent_dir=os.path.dirname(os.path.split(in_cache_dir)[0])
-        version =[]
+        cache_parent_dir = os.path.dirname(os.path.split(in_cache_dir)[0])
+        version = []
         for item in os.listdir(cache_parent_dir):
-            #它本质上是利用特殊文件结构查询文件夹，文件夹以v版本号为名称
-            if os.path.isdir(os.path.join(cache_parent_dir,item)) and item.startswith("v"):
+            # 它本质上是利用特殊文件结构查询文件夹，文件夹以v版本号为名称
+            if os.path.isdir(os.path.join(cache_parent_dir, item)) and item.startswith(
+                "v"
+            ):
                 try:
                     # 切片器，去除v
-                    version_num=int(item[1:])
+                    version_num = int(item[1:])
                     version.append(version_num)
                 except:
                     continue
         return len(version)
 
-    def _get_last_modify_time(self,in_file_path:str)->str:
+    def _get_last_modify_time_(self, in_file_path: str) -> str:
         if os.path.exists(in_file_path):
-            time_stamp=os.path.getmtime(in_file_path)
-            timestr= datetime.datetime.fromtimestamp(time_stamp).strftime("%d/%m/%Y, %H:%M")
+            time_stamp = os.path.getmtime(in_file_path)
+            timestr = datetime.datetime.fromtimestamp(time_stamp).strftime(
+                "%d/%m/%Y, %H:%M"
+            )
             return timestr
         else:
             return "--"
 
+    def _focus_on_node_(self):
+        """
+        聚焦到首个所选对象
+        """
+        selected_node = self.cache_tree.selectedItems()[0]
+        if not selected_node:
+            hou.ui.displayMessage(
+                "Please Select A Node In List", severity=hou.severityType.Warning
+            )
+            return
+        # 获取节点路径
+        selected_node_path = selected_node.text(1)
+        selected_node_ref = hou.node(selected_node_path)
+        if not selected_node_ref:
+            hou.ui.displayMessage(
+                "Invalid Node Selected,Please Scan And Reselect",
+                severity=hou.severityType.Warning,
+            )
+            return
+        selected_node_ref.setSelected(True)
+        # 查找邻近的UI(但是不会给UI设置突出显示，如果有多个ui可能需要找到对应)，打开所选择节点父级
+        target_pane = None
+        for pane in hou.ui.paneTabs():
+            if isinstance(pane, hou.NetworkEditor):
+                target_pane = pane
+                break
+        if not target_pane:
+            hou.ui.displayMessage(
+                "Find Null Avaliable Network Table", severity=hou.severityType.Warning
+            )
+            return
+        print(target_pane)
+        print(selected_node_ref.parent().path())
+        target_pane.cd(selected_node_ref.parent().path())
+        target_pane.frameSelection()
+
+
 def ShowSceneCacheWidget():
-    win=SceneCacheManagerUI()
+    win = SceneCacheManagerUI()
     win.show()
