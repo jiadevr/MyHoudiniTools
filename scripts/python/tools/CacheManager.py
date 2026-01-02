@@ -1,6 +1,7 @@
 import hou
 import os
 import datetime
+import platform
 from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
 
 
@@ -55,6 +56,7 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
         self.cleanup_button.clicked.connect(self.CleanUp)
         self.explorer_button.clicked.connect(self.OpenExplorer)
         self.scan_button.clicked.connect(self.ScanScene)
+        self.explorer_button.clicked.connect(self._open_explore_)
 
         self.cache_tree.itemDoubleClicked.connect(self._focus_on_node_)
 
@@ -87,7 +89,7 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
                         continue
                     last_modified_str = self._get_last_modify_time_(cache_path)
                     total_version_count = self._get_total_version_count_(cache_path)
-                    relative_path = self._convert_to_relative_path(cache_path)
+                    # relative_path = self._convert_to_relative_path(cache_path)
                     node_name, node_path, node_type_real = self._get_node_base_info_(
                         single_cache_node
                     )
@@ -95,7 +97,7 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
                         "node_name": node_name,
                         "node_path": node_path,
                         "node_type": node_type_real,
-                        "cache_path": relative_path,
+                        "cache_path": cache_path,
                         "current_version": self._get_current_version_(node_path),
                         "other_versions": str(total_version_count),
                         "lastmodified": last_modified_str,
@@ -225,6 +227,27 @@ class SceneCacheManagerUI(QtWidgets.QMainWindow):
         print(selected_node_ref.parent().path())
         target_pane.cd(selected_node_ref.parent().path())
         target_pane.frameSelection()
+
+    def _open_explore_(self):
+        '''
+        打开节点缓存路径对应的文件夹
+        '''
+        select_item = self.cache_tree.selectedItems()[0]
+        select_path = select_item.text(3)
+        select_path = os.path.split(select_path)[0]
+        if not os.path.exists(select_path):
+            print(f"Target Path {select_path} Does't Exist")
+            return
+        # 对不同平台采用不同打开策略
+        try:
+            if platform.system() == "Windows":
+                os.startfile(select_path)
+            elif platform.system() == "Linux":
+                os.system(f"xfg-open '{select_path}")
+            else:
+                os.system(f"open '{select_path}")
+        except Exception as error:
+            print(f"Fail to Open Path{select_path},on your {platform.system()} OS")
 
 
 def ShowSceneCacheWidget():
