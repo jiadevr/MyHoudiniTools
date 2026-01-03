@@ -10,6 +10,7 @@
     <memberTool name="createproject"/>
     <memberTool name="projectmanager"/>
     <memberTool name="scene_cache_manager"/>
+    <memberTool name="tex_to_material"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -30,5 +31,11 @@ tools.ProjectManager.ShowProjectManagerWidget()]]></script>
   <tool name="scene_cache_manager" label="SceneCacheManager" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[import tools.CacheManager
 tools.CacheManager.ShowSceneCacheWidget()]]></script>
+  </tool>
+
+  <tool name="tex_to_material" label="TexToMat" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.tex_to_mtlx
+
+tools.tex_to_mtlx.ShowTexToMatTool()]]></script>
   </tool>
 </shelfDocument>
