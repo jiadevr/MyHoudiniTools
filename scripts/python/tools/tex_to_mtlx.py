@@ -2,6 +2,7 @@ import hou
 import os
 import re
 import pprint
+import pdb
 from collections import defaultdict
 from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
 
@@ -101,12 +102,43 @@ class TxToMtlx(QtWidgets.QMainWindow):
         self._setup_connections()
 
         self.material_lib_path = None
-        self.material_lib_node: hou.OpNode = hou.node(
-            "/shop"
-        )  # <---------Remove After Test
+        self.material_lib_node: hou.OpNode = hou.node('/obj/lopnet1/materiallibrary1') # <---------Remove After Test
         # 用户选择的纹理文件夹路径
         self.tex_folder: str = ""
         self.tex_collection: dict = {}
+
+    def _init_constants(self):
+        self.TEXTURE_TYPE_SORTED = {
+            "texturesColor": [
+                "diffuse",
+                "diff",
+                "albedo",
+                "alb",
+                "base",
+                "col",
+                "color",
+                "basecolor",
+            ],
+            "texturesMetal": ["metallic", "metalness", "metal", "mlt", "met"],
+            "texturesSpecular": ["speculatiry", "specular", "spec", "spc"],
+            "texturesRough": ["roughness", "rough", "rgh"],
+            "texturesGloss": ["gloss", "glossy", "glossiness"],
+            "texturesTrans": ["transmission", "transparency", "trans"],
+            "texturesEmm": ["emission", "emissive", "emit", "emm"],
+            "texturesAplha": ["opacity", "opac", "alpha"],
+            "texturesAO": ["ambient_occlusion", "ao", "occlusion"],
+            "texturesBump": ["bump", "bmp", "height"],
+            "texturesDisp": [
+                "displacement",
+                "displace",
+                "disp",
+                "dsp",
+                "heightmap",
+            ],
+            "texturesExtra": ["user", "mask"],
+            "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
+            "texturesSSS": ["translucency", "sss"],
+        }
 
     def _setup_help_section(self):
         """Setup the help button section"""
@@ -210,7 +242,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         \nSSS: translucency, sss,
         \nEmission: emission, emissive, emit, emm,
         \nOpacity:opacity, opac, alpha,
-        \nAmbient Occlusion:ambient_occlusion, ao, occlusion, cavity,
+        \nAmbient Occlusion:ambient_occlusion, ao, occlusion,
         \nBump:bump, bmp,
         \nHeight:displacement, displace, disp, dsp, heightmap, height,
         \nExtra:user, mask,
@@ -322,11 +354,11 @@ class TxToMtlx(QtWidgets.QMainWindow):
             # 使用正则表达式获取纹理分辨率
             tex_res = self.ORDINARY_TEX_REGEX_PATTERN.search(elem)
             if not tex_res == None:
-                material_collection[material_name]["res"].append(tex_res.group(1))
+                material_collection[material_name]["res"] = tex_res.group(1)
             # 使用正则表达式匹配UDIM
             is_UDIM = self.UDIM_TEX_REGEX_PATTERN.search(elem)
             if not is_UDIM == None:
-                material_collection[material_name]["UDIM"].append(is_UDIM)
+                material_collection[material_name]["UDIM"] = is_UDIM
 
         if len(material_collection) == 0:
             return {}
@@ -345,10 +377,12 @@ class TxToMtlx(QtWidgets.QMainWindow):
     def _select_all_in_matlist_(self):
         # self.material_list.selectAll()
         # 另一种选择方式
-        selection_model=self.material_list.selectionModel()
+        selection_model = self.material_list.selectionModel()
         for row in range(self.model.rowCount()):
-            index=self.model.index(row,0)
-            selection_model.select(index,QtCore.QItemSelectionModel.SelectionFlag.Select)
+            index = self.model.index(row, 0)
+            selection_model.select(
+                index, QtCore.QItemSelectionModel.SelectionFlag.Select
+            )
 
     def _deselect_all_in_matlist_(self):
         self.material_list.clearSelection()
@@ -359,7 +393,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         selected_mat_items = self.material_list.selectedIndexes()
         if len(selected_mat_items) == 0:
             hou.ui.displayMessage(
-                "Please Select A Least One Material",  severity=hou.severityType.Error
+                "Please Select A Least One Material", severity=hou.severityType.Error
             )
             return
         self.progress_bar.setMaximum(len(selected_mat_items))
@@ -382,7 +416,9 @@ class TxToMtlx(QtWidgets.QMainWindow):
             current_progress += 1
             self.progress_bar.setValue(current_progress)
 
-        hou.ui.displayMessage("Finish Creating Material", severity=hou.severityType.Message)
+        hou.ui.displayMessage(
+            "Finish Creating Material", severity=hou.severityType.Message
+        )
 
 
 class MtlxMaterial:
@@ -391,24 +427,322 @@ class MtlxMaterial:
         mat_name,
         b_use_mtlTX,
         node_path,
-        node_ref,
+        node_ref: hou.OpNode,
         tex_folder_path,
         texture_list,
     ) -> None:
         self.mat_name = mat_name
         self.b_mtlTX = b_use_mtlTX
         self.node_path = node_path
-        self.node_ref = node_ref
+        self.node_ref: hou.OpNode = node_ref
         self.tex_folder_path = tex_folder_path
         self.texture_list = texture_list
 
     def create_material(self):
-        print(self.mat_name)
-        print(self.b_mtlTX)
-        print(self.node_path)
-        print(self.node_ref)
-        print(self.tex_folder_path)
-        print(self.texture_list)
+        if not (self.node_ref and self.mat_name and self.texture_list):
+            return
+
+        try:
+            
+            # TX转换等
+            target_material_info = self._prepare_material_info_()
+            # 构建基础subnet并改造成mtlmaterial对应的输入输出
+            subnet_context = self._create_material_subnet_(target_material_info)
+            
+            #pdb.set_trace()
+            # 构建mtlmaterial中的基础节点，返回接收纹理的节点
+            mtlx_surface_node, mtlx_displace_node = self._create_base_nodes_in_subnet_(
+                subnet_context
+            )
+            
+            # UV缩放，内部UDIM短路
+            place2d_nodes = self._create_place2d_(subnet_context, target_material_info)
+            # 节点布局
+            self._layout_nodes_(subnet_context)
+        except Exception as error:
+            print(f"Error:{error}")
+
+    def _prepare_material_info_(self):
+        """
+        根据传入的是否需要转成TX格式执行格式转换
+        Return:
+        异位修改过的self.texture_list[self.mat_name]
+        """
+        target_material_info: dict = self.texture_list[self.mat_name]
+        if self.b_mtlTX:
+            texture_summary = []
+            for key, value in target_material_info.items():
+                if key not in ("UDIM", "Size"):
+                    if isinstance(value, list):
+                        texture_summary.extend(value)
+        # 执行TX转换操作
+        return target_material_info
+
+    def _create_material_subnet_(self, in_material_info: dict):
+        """
+        创建MaterialSubnet并及进行初始化
+        :param in_material_info: 记录材质参数的字典
+        :type in_material_info: dict
+        """
+        material_node_name = (
+            self.mat_name + f"_{in_material_info['size']}K"
+            if "size" in in_material_info
+            else self.mat_name
+        )
+        # 检查是否已经存在同名节点
+        duplicated_node = self.node_ref.node(material_node_name)
+        
+        if duplicated_node:
+            duplicated_node.destroy()
+        # 创建新的节点
+        print("Type of Parent Node")
+        print(type(self.node_ref))
+        print(self.node_ref.path())
+        material_node = self.node_ref.createNode("subnet", material_node_name)
+        # 这两个函数返回值一样都是Node
+        #subnet_as_opnode = material_node
+        subnet_as_opnode = self.node_ref.node(material_node.name())
+        print("Type of CreatedNode")
+        print(type(subnet_as_opnode))
+        # 删除不需要使用的输入输出
+        old_interface = subnet_as_opnode.allItems()
+        for index, _ in enumerate(old_interface):
+            old_interface[index].destroy()
+        # 设置需要的输入输出
+        self._setup_material_parameters_(material_node)
+        material_node.setMaterialFlag(True)
+        # 创建Subnet内基础组成部分
+        return subnet_as_opnode
+
+    def _setup_material_parameters_(self, in_mtlx_node):
+        # 对已创建的节点调用AsCode并调整
+        hou_parm_template_group = hou.ParmTemplateGroup()
+        # Code for parameter template
+        hou_parm_template = hou.FolderParmTemplate(
+            "folder1",
+            "MaterialX Builder",
+            folder_type=hou.folderType.Collapsible,
+            default_value=0,
+            ends_tab_group=False,
+        )
+        hou_parm_template.setTags(
+            {"group_type": "collapsible", "sidefx::shader_isparm": "0"}
+        )
+        # Code for parameter template
+        hou_parm_template2 = hou.IntParmTemplate(
+            "inherit_ctrl",
+            "Inherit from Class",
+            1,
+            default_value=([2]),
+            min=0,
+            max=10,
+            min_is_strict=False,
+            max_is_strict=False,
+            look=hou.parmLook.Regular,
+            naming_scheme=hou.parmNamingScheme.Base1,
+            menu_items=(["0", "1", "2"]),
+            menu_labels=(["Never", "Always", "Material Flag"]),
+            icon_names=([]),
+            item_generator_script="",
+            item_generator_script_language=hou.scriptLanguage.Python,
+            menu_type=hou.menuType.Normal,
+            menu_use_token=False,
+        )
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.StringParmTemplate(
+            "shader_referencetype",
+            "Class Arc",
+            1,
+            default_value=(
+                [
+                    "n = hou.pwd()\nn_hasFlag = n.isMaterialFlagSet()\ni = n.evalParm('inherit_ctrl')\nr = 'none'\nif i == 1 or (n_hasFlag and i == 2):\n    r = 'inherit'\nreturn r"
+                ]
+            ),
+            default_expression=(
+                [
+                    "n = hou.pwd()\nn_hasFlag = n.isMaterialFlagSet()\ni = n.evalParm('inherit_ctrl')\nr = 'none'\nif i == 1 or (n_hasFlag and i == 2):\n    r = 'inherit'\nreturn r"
+                ]
+            ),
+            default_expression_language=([hou.scriptLanguage.Python]),
+            naming_scheme=hou.parmNamingScheme.Base1,
+            string_type=hou.stringParmType.Regular,
+            menu_items=(["none", "reference", "inherit", "specialize", "represent"]),
+            menu_labels=(["None", "Reference", "Inherit", "Specialize", "Represent"]),
+            icon_names=([]),
+            item_generator_script="",
+            item_generator_script_language=hou.scriptLanguage.Python,
+            menu_type=hou.menuType.Normal,
+        )
+        hou_parm_template2.setTags(
+            {"sidefx::shader_isparm": "0", "spare_category": "Shader"}
+        )
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.StringParmTemplate(
+            "shader_baseprimpath",
+            "Class Prim Path",
+            1,
+            default_value=(["/__class_mtl__/`$OS`"]),
+            naming_scheme=hou.parmNamingScheme.Base1,
+            string_type=hou.stringParmType.Regular,
+            menu_items=([]),
+            menu_labels=([]),
+            icon_names=([]),
+            item_generator_script="",
+            item_generator_script_language=hou.scriptLanguage.Python,
+            menu_type=hou.menuType.Normal,
+        )
+        hou_parm_template2.setTags(
+            {
+                "script_action": "import lopshaderutils\nlopshaderutils.selectPrimFromInputOrFile(kwargs)",
+                "script_action_help": "Select a primitive in the Scene Viewer or Scene Graph Tree pane.\nCtrl-click to select using the primitive picker dialog.",
+                "script_action_icon": "BUTTONS_reselect",
+                "sidefx::shader_isparm": "0",
+                "sidefx::usdpathtype": "prim",
+                "spare_category": "Shader",
+            }
+        )
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.SeparatorParmTemplate("separator1")
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.StringParmTemplate(
+            "tabmenumask",
+            "Tab Menu Mask",
+            1,
+            default_value=(
+                [
+                    "MaterialX parameter constant collect null genericshader subnet subnetconnector suboutput subinput"
+                ]
+            ),
+            naming_scheme=hou.parmNamingScheme.Base1,
+            string_type=hou.stringParmType.Regular,
+            menu_items=([]),
+            menu_labels=([]),
+            icon_names=([]),
+            item_generator_script="",
+            item_generator_script_language=hou.scriptLanguage.Python,
+            menu_type=hou.menuType.Normal,
+        )
+        hou_parm_template2.setTags({"spare_category": "Tab Menu"})
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.StringParmTemplate(
+            "shader_rendercontextname",
+            "Render Context Name",
+            1,
+            default_value=(["mtlx"]),
+            naming_scheme=hou.parmNamingScheme.Base1,
+            string_type=hou.stringParmType.Regular,
+            menu_items=([]),
+            menu_labels=([]),
+            icon_names=([]),
+            item_generator_script="",
+            item_generator_script_language=hou.scriptLanguage.Python,
+            menu_type=hou.menuType.Normal,
+        )
+        hou_parm_template2.setTags(
+            {"sidefx::shader_isparm": "0", "spare_category": "Shader"}
+        )
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        # Code for parameter template
+        hou_parm_template2 = hou.ToggleParmTemplate(
+            "shader_forcechildren", "Force Translation of Children", default_value=True
+        )
+        hou_parm_template2.setTags(
+            {"sidefx::shader_isparm": "0", "spare_category": "Shader"}
+        )
+        hou_parm_template.addParmTemplate(hou_parm_template2)
+        hou_parm_template_group.append(hou_parm_template)
+        in_mtlx_node.setParmTemplateGroup(hou_parm_template_group)
+
+    def _create_base_nodes_in_subnet_(self, in_material_net_node: hou.Node) -> tuple:
+        """
+        Docstring for _create_base_nodes_in_subnet_
+
+        :param in_mtlx_node: 节点所在的父节点
+        :type in_mtlx_node: hou.Node
+        :return: 返回standard_surface和displacement节点（非输出节点）
+        :rtype: tuple[Any, ...]
+        """
+        surface_output = self._create_output_node_(in_material_net_node, "surface")
+        displace_output = self._create_output_node_(
+            in_material_net_node, "displacement"
+        )
+       
+        mtlx_standard_surf = in_material_net_node.createNode(
+            "mtlxstandard_surface", self.mat_name + "_mtlxSurface"
+        )
+        mtlx_displacement = in_material_net_node.createNode(
+            "mtlxdisplacement", self.mat_name + "_mtlxDisplacement"
+        )
+        
+        # 设置连接
+        surface_output.setInput(0, mtlx_standard_surf)
+        displace_output.setInput(0, mtlx_displacement)
+        
+        return mtlx_standard_surf, mtlx_displacement
+
+    def _create_output_node_(self, in_material_net_node: hou.Node, in_output_name: str):
+        output_node = in_material_net_node.createNode("subnetconnector", f"{in_output_name}_output")
+        
+        if not output_node:
+            hou.ui.displayMessage(
+                "CreateNode Return not Match,Pleace Check",
+                severity=hou.severityType.Error,
+            )
+            return
+        
+        output_node.parm("connectorkind")._set("output")
+        output_node.parm("parmname")._set(in_output_name.lower())
+        output_node.parm("parmlabel")._set(in_output_name.capitalize())
+        output_node.parm("parmtype")._set(in_output_name.lower())
+        
+        color = (
+            hou.Color(0.89, 0.69, 0.6)
+            if in_output_name.lower() == "surface"
+            else hou.Color(0.6, 0.69, 0.89)
+        )
+        output_node.setColor(color)
+        
+        return output_node
+
+    def _create_place2d_(self, in_material_net_node: hou.Node, in_material_info: dict):
+        # UDIM纹理不创建UV缩放
+        pprint.pprint(in_material_info)
+        if not "UDIM" in in_material_info.keys():
+            print("Create Place2D Nodes")
+            nodes = {
+                "coord": in_material_net_node.createNode(
+                    "mtlxtexcoord", f"{self.mat_name}_texcoord"
+                ),
+                "scale": in_material_net_node.createNode(
+                    "mtlxconstant", f"{self.mat_name}_scale"
+                ),
+                "rotate": in_material_net_node.createNode(
+                    "mtlxconstant", f"{self.mat_name}_rotation"
+                ),
+                "offset": in_material_net_node.createNode(
+                    "mtlxconstant", f"{self.mat_name}_offset"
+                ),
+                "place2d": in_material_net_node.createNode(
+                    "mtlxplace2d", f"{self.mat_name}_place2d"
+                ),
+            }
+            nodes["scale"].parm("value")._set(1)
+            # 连接节点
+            nodes["place2d"].setInput(0, nodes["coord"])
+            nodes["place2d"].setInput(2, nodes["scale"])
+            nodes["place2d"].setInput(3, nodes["rotate"])
+            nodes["place2d"].setInput(4, nodes["offset"])
+            return nodes["place2d"]
+        return None
+
+    def _layout_nodes_(self, in_material_net_node: hou.Node):
+        in_material_net_node.layoutChildren()
+        self.node_ref.layoutChildren()
 
 
 def ShowTexToMatTool():
