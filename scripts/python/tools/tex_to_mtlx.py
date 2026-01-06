@@ -17,7 +17,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         ".tif",
         ".tiff",
         ".exr",
-        ".targa",
+        ".targa"
     )
     ORDINARY_TEX_REGEX_PATTERN = re.compile(r"(\d+[Kk])")
     UDIM_TEX_REGEX_PATTERN = re.compile(r"(_\d{4})")
@@ -75,7 +75,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         "nor",
         "nrm",
         "nrml",
-        "norm",
+        "norm"
     )
 
     def __init__(self):
@@ -102,43 +102,12 @@ class TxToMtlx(QtWidgets.QMainWindow):
         self._setup_connections()
 
         self.material_lib_path = None
-        self.material_lib_node: hou.OpNode = hou.node('/obj/lopnet1/materiallibrary1') # <---------Remove After Test
+        self.material_lib_node: hou.OpNode = hou.node(
+            "/obj/lopnet1/materiallibrary1"
+        )  # <---------Remove After Test
         # 用户选择的纹理文件夹路径
         self.tex_folder: str = ""
         self.tex_collection: dict = {}
-
-    def _init_constants(self):
-        self.TEXTURE_TYPE_SORTED = {
-            "texturesColor": [
-                "diffuse",
-                "diff",
-                "albedo",
-                "alb",
-                "base",
-                "col",
-                "color",
-                "basecolor",
-            ],
-            "texturesMetal": ["metallic", "metalness", "metal", "mlt", "met"],
-            "texturesSpecular": ["speculatiry", "specular", "spec", "spc"],
-            "texturesRough": ["roughness", "rough", "rgh"],
-            "texturesGloss": ["gloss", "glossy", "glossiness"],
-            "texturesTrans": ["transmission", "transparency", "trans"],
-            "texturesEmm": ["emission", "emissive", "emit", "emm"],
-            "texturesAplha": ["opacity", "opac", "alpha"],
-            "texturesAO": ["ambient_occlusion", "ao", "occlusion"],
-            "texturesBump": ["bump", "bmp", "height"],
-            "texturesDisp": [
-                "displacement",
-                "displace",
-                "disp",
-                "dsp",
-                "heightmap",
-            ],
-            "texturesExtra": ["user", "mask"],
-            "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
-            "texturesSSS": ["translucency", "sss"],
-        }
 
     def _setup_help_section(self):
         """Setup the help button section"""
@@ -357,8 +326,9 @@ class TxToMtlx(QtWidgets.QMainWindow):
                 material_collection[material_name]["res"] = tex_res.group(1)
             # 使用正则表达式匹配UDIM
             is_UDIM = self.UDIM_TEX_REGEX_PATTERN.search(elem)
-            if not is_UDIM == None:
-                material_collection[material_name]["UDIM"] = is_UDIM
+            material_collection[material_name]["UDIM"] = (
+                True if is_UDIM != None else False
+            )
 
         if len(material_collection) == 0:
             return {}
@@ -437,26 +407,60 @@ class MtlxMaterial:
         self.node_ref: hou.OpNode = node_ref
         self.tex_folder_path = tex_folder_path
         self.texture_list = texture_list
+        self._init_constants()
+
+    def _init_constants(self):
+        self.TEXTURE_TYPE_SORTED = {
+            "texturesColor": [
+                "diffuse",
+                "diff",
+                "albedo",
+                "alb",
+                "base",
+                "col",
+                "color",
+                "basecolor"
+            ],
+            "texturesMetal": ["metallic", "metalness", "metal", "mlt", "met"],
+            "texturesSpecular": ["speculatiry", "specular", "spec", "spc"],
+            "texturesRough": ["roughness", "rough", "rgh"],
+            "texturesGloss": ["gloss", "glossy", "glossiness"],
+            "texturesTrans": ["transmission", "transparency", "trans"],
+            "texturesEmm": ["emission", "emissive", "emit", "emm"],
+            "texturesAplha": ["opacity", "opac", "alpha"],
+            "texturesAO": ["ambient_occlusion", "ao", "occlusion"],
+            "texturesBump": ["bump", "bmp", "height"],
+            "texturesDisp": ["displacement", "displace", "disp", "dsp", "heightmap"],
+            "texturesExtra": ["user", "mask"],
+            "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
+            "texturesSSS": ["translucency", "sss"]
+        }
 
     def create_material(self):
         if not (self.node_ref and self.mat_name and self.texture_list):
             return
 
         try:
-            
+
             # TX转换等
             target_material_info = self._prepare_material_info_()
             # 构建基础subnet并改造成mtlmaterial对应的输入输出
             subnet_context = self._create_material_subnet_(target_material_info)
-            
-            #pdb.set_trace()
             # 构建mtlmaterial中的基础节点，返回接收纹理的节点
             mtlx_surface_node, mtlx_displace_node = self._create_base_nodes_in_subnet_(
                 subnet_context
             )
-            
             # UV缩放，内部UDIM短路
             place2d_nodes = self._create_place2d_(subnet_context, target_material_info)
+            print(target_material_info)
+            # 处理纹理
+            self._process_textures_(
+                subnet_context,
+                target_material_info,
+                mtlx_surface_node,
+                mtlx_displace_node,
+                place2d_nodes
+            )
             # 节点布局
             self._layout_nodes_(subnet_context)
         except Exception as error:
@@ -467,6 +471,16 @@ class MtlxMaterial:
         根据传入的是否需要转成TX格式执行格式转换
         Return:
         异位修改过的self.texture_list[self.mat_name]
+        返回值示例
+        {
+        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'], 
+        'res': '2k', 
+        'UDIM': False, 
+        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'], 
+        'disp': ['old_linoleum_flooring_01_disp_2k.png'], 
+        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'], 
+        'rough': ['old_linoleum_flooring_01_rough_2k.jpg']
+        }
         """
         target_material_info: dict = self.texture_list[self.mat_name]
         if self.b_mtlTX:
@@ -491,7 +505,7 @@ class MtlxMaterial:
         )
         # 检查是否已经存在同名节点
         duplicated_node = self.node_ref.node(material_node_name)
-        
+
         if duplicated_node:
             duplicated_node.destroy()
         # 创建新的节点
@@ -500,7 +514,7 @@ class MtlxMaterial:
         print(self.node_ref.path())
         material_node = self.node_ref.createNode("subnet", material_node_name)
         # 这两个函数返回值一样都是Node
-        #subnet_as_opnode = material_node
+        # subnet_as_opnode = material_node
         subnet_as_opnode = self.node_ref.node(material_node.name())
         print("Type of CreatedNode")
         print(type(subnet_as_opnode))
@@ -671,48 +685,50 @@ class MtlxMaterial:
         displace_output = self._create_output_node_(
             in_material_net_node, "displacement"
         )
-       
+
         mtlx_standard_surf = in_material_net_node.createNode(
             "mtlxstandard_surface", self.mat_name + "_mtlxSurface"
         )
         mtlx_displacement = in_material_net_node.createNode(
             "mtlxdisplacement", self.mat_name + "_mtlxDisplacement"
         )
-        
+
         # 设置连接
         surface_output.setInput(0, mtlx_standard_surf)
         displace_output.setInput(0, mtlx_displacement)
-        
+
         return mtlx_standard_surf, mtlx_displacement
 
     def _create_output_node_(self, in_material_net_node: hou.Node, in_output_name: str):
-        output_node = in_material_net_node.createNode("subnetconnector", f"{in_output_name}_output")
-        
+        output_node = in_material_net_node.createNode(
+            "subnetconnector", f"{in_output_name}_output"
+        )
+
         if not output_node:
             hou.ui.displayMessage(
                 "CreateNode Return not Match,Pleace Check",
                 severity=hou.severityType.Error,
             )
             return
-        
+
         output_node.parm("connectorkind")._set("output")
         output_node.parm("parmname")._set(in_output_name.lower())
         output_node.parm("parmlabel")._set(in_output_name.capitalize())
         output_node.parm("parmtype")._set(in_output_name.lower())
-        
+
         color = (
             hou.Color(0.89, 0.69, 0.6)
             if in_output_name.lower() == "surface"
             else hou.Color(0.6, 0.69, 0.89)
         )
         output_node.setColor(color)
-        
+
         return output_node
 
     def _create_place2d_(self, in_material_net_node: hou.Node, in_material_info: dict):
         # UDIM纹理不创建UV缩放
         pprint.pprint(in_material_info)
-        if not "UDIM" in in_material_info.keys():
+        if not in_material_info.get("UDIM",False):
             print("Create Place2D Nodes")
             nodes = {
                 "coord": in_material_net_node.createNode(
@@ -744,7 +760,149 @@ class MtlxMaterial:
         in_material_net_node.layoutChildren()
         self.node_ref.layoutChildren()
 
+    def _process_textures_(
+        self,
+        in_material_net_node: hou.Node,
+        in_material_info: dict,
+        in_surface_node: hou.Node,
+        in_displace_node: hou.Node,
+        in_place2d_nodes,
+    ):
+        """
+        根据整理获得的信息创建材质
+
+        :param in_material_net_node: 纹理采样所在的父节点
+        :param in_material_info: 纹理信息dict
+        :param in_surface_node: 先前创建的surface纹理attribute节点
+        :param in_displace_node: 先前创建的displacement纹理attribute节点
+        :param in_place2d_nodes: 先前创建的UVTranslation节点
+        """
+        print("Get In Process texture")
+        attribute_names = in_surface_node.inputNames()
+        for texture_type, texture_info in self._surface_texture_sort_iterator_(
+            in_material_info
+        ):
+            print(f"Current Iterator {texture_type}")
+            texture_sampler_node=self._create_texture_sample_node_(
+                in_material_net_node, texture_info, in_material_info
+            )
+            if in_place2d_nodes and not in_material_info.get("UDIM",False):
+                #coord_index=in_place2d_nodes.inputIndex("texcoordx texcoordy")
+                #print(f"Coord_index Is {coord_index}")
+                texture_sampler_node.setInput(3,in_place2d_nodes)
+            #in_surface_node.inputIndex()
+
+
+    def _surface_texture_sort_iterator_(self, in_material_info: dict):
+        """
+        传进来的粗分类数据进行重新分类
+        :param in_material_info: 当前处理的材质信息
+        :type in_material_info: dict
+        """
+        # 只处理表面纹理，置换、法线等忽略
+        skip_keys = ["UDIM","Size","bump","bmp","height","displacement","displace","disp","dsp","heightmap","normal","nor","nrm","nrml","norm"]
+        for texture_key in in_material_info.keys():
+            if texture_key in skip_keys:
+                continue
+            for texture_type, type_indicators in self.TEXTURE_TYPE_SORTED.items():
+                if any(
+                    indicator in texture_key.lower() for indicator in type_indicators
+                ):
+                    texture_info = {
+                        "name": texture_key,
+                        "file": in_material_info[texture_key][0],
+                        "type": texture_type,
+                    }
+                    yield texture_type, texture_info
+
+    def _create_texture_sample_node_(
+        self, in_parent_node: hou.Node, in_texture_info: dict, in_material_info: dict
+    )->hou.VopNode:
+        """
+        创建纹理采样节点并赋值,UDIM和常规纹理使用不同采样类型
+
+        :param in_parent_node: 纹理采样节点的父节点
+        :type in_parent_node: hou.Node
+        :param in_texture_info: 已进行重分类的纹理信息
+        :type in_texture_info: dict
+        :param in_material_info: 原始材质信息
+        :type in_material_info: dict
+        """
+        print("Call Create Texture Sample")
+        if not in_parent_node:
+            print("Create Texture Sample Node Failed,Invalid Input")
+            return
+        sample_node_class = (
+            "mtlximage" if not in_material_info.get("UDIM", False) else "mtlxtiledimage"
+        )
+        texture_sample_node:hou.VopNode = in_parent_node.createNode(
+            sample_node_class, in_texture_info["type"][8:] + "_sampler"
+        )
+        print("Finish Create Node")
+        # 设置路径
+        texture_path=self._get_texture_path_(in_texture_info["name"],in_material_info)
+        texture_sample_node.parm("file")._set(texture_path)
+        print("Finish Setting Path")
+        # 设置采样节点类型
+        self._configure_texture_sample_node_(in_texture_info["type"],texture_sample_node)
+        print("Finish configure Node")
+        return texture_sample_node
+
+    def _get_texture_path_(self,in_texture_name:str,in_material_info:dict)->str:
+        '''
+        返回纹理路径,主要用于tx文件的处理
+        :param in_texture_name: 原dict中纹理key
+        :type in_texture_name: str
+        :param in_material_info: 原dict
+        :type in_material_info: dict
+        {
+        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'], 
+        'res': '2k', 
+        'UDIM': False, 
+        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'], 
+        'disp': ['old_linoleum_flooring_01_disp_2k.png'], 
+        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'], 
+        'rough': ['old_linoleum_flooring_01_rough_2k.jpg']
+        }
+        
+        '''
+        file_name=in_material_info[in_texture_name][0]
+        # inmaterialinfo中只有文件信息，没有路径信息
+        if self.b_mtlTX:
+            file_name_without_extension=file_name.split(".")[0]
+            file_name=file_name_without_extension+".tx"
+        if in_material_info.get("UDIM",True):
+            file_name=re.sub(r"\d{4}","<UDIM>",file_name)
+        file_path=os.path.join(self.tex_folder_path,file_name).replace(os.sep,"/")
+        print(f"Finish Setting Path,Targte Path:{file_path}")
+        return file_path
+        
+    def _configure_texture_sample_node_(self,_in_texture_type_:str,in_sample_node:hou.OpNode):
+        if not in_sample_node:
+            print("Config Node Failed,The Node Doesn't Exist")
+            return
+        sample_model="float"
+        color_space="raw"
+        # 对于BaseColor和次表面散射使用Color3 SRGB
+        if _in_texture_type_ in("texturesColor","texturesSSS"):
+            sample_model="color3"
+            color_space="srgb_texture"
+        in_sample_node.parm("signature")._set(sample_model)
+        in_sample_node.parm("filecolorspace")._set(color_space)
 
 def ShowTexToMatTool():
     window_gui = TxToMtlx()
     window_gui.show()
+
+
+# def _iterate_textures(self, material_lib_info):
+#     skip_keys =['UDIM''Size','normal','nor''nrm','nrml','norm','bump','bmp','height','displace']
+#     for texture in material_lib_info:
+#         if texture in skip_keys:
+#             continue
+#         for texture_type, variants in self.TEXTURE_TYPE_SORTED.items():
+#             if any(variant in texture.lower() for variant in variants):
+#                 texture_info = {'name':texture,
+#                                 'file': material_lib_info[texture][0],
+#                                 'type':texture_type}
+#                 yield texture_type, texture_info
