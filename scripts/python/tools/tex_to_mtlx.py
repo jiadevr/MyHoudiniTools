@@ -17,7 +17,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         ".tif",
         ".tiff",
         ".exr",
-        ".targa"
+        ".targa",
     )
     ORDINARY_TEX_REGEX_PATTERN = re.compile(r"(\d+[Kk])")
     UDIM_TEX_REGEX_PATTERN = re.compile(r"(_\d{4})")
@@ -75,7 +75,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         "nor",
         "nrm",
         "nrml",
-        "norm"
+        "norm",
     )
 
     def __init__(self):
@@ -419,7 +419,7 @@ class MtlxMaterial:
                 "base",
                 "col",
                 "color",
-                "basecolor"
+                "basecolor",
             ],
             "texturesMetal": ["metallic", "metalness", "metal", "mlt", "met"],
             "texturesSpecular": ["speculatiry", "specular", "spec", "spc"],
@@ -433,8 +433,47 @@ class MtlxMaterial:
             "texturesDisp": ["displacement", "displace", "disp", "dsp", "heightmap"],
             "texturesExtra": ["user", "mask"],
             "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
-            "texturesSSS": ["translucency", "sss"]
+            "texturesSSS": ["translucency", "sss"],
         }
+        self.TEXTURE_TYPE_TO_INPUT_NAME = {
+            "texturesColor": {
+                "input": "base_color",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesMetal": {
+                "input": "metalness",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesSpecular": {
+                "input": "specular",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesRough": {
+                "input": "specular_roughness",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesGloss": {
+                "input": "specular_roughness",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesTrans": {
+                "input": "trasmission",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesEmm": {
+                "input": "emission",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesAplha": {
+                "input": "opacity",
+                "setup": self._setup_ordinary_connect_,
+            },
+            "texturesSSS": {
+                "input": "subsurface_color",
+                "setup": self._setup_ordinary_connect_,
+            },
+        }
+        self.PREFIX_LENGTH: int = 8
 
     def create_material(self):
         if not (self.node_ref and self.mat_name and self.texture_list):
@@ -459,7 +498,7 @@ class MtlxMaterial:
                 target_material_info,
                 mtlx_surface_node,
                 mtlx_displace_node,
-                place2d_nodes
+                place2d_nodes,
             )
             # 节点布局
             self._layout_nodes_(subnet_context)
@@ -473,12 +512,12 @@ class MtlxMaterial:
         异位修改过的self.texture_list[self.mat_name]
         返回值示例
         {
-        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'], 
-        'res': '2k', 
-        'UDIM': False, 
-        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'], 
-        'disp': ['old_linoleum_flooring_01_disp_2k.png'], 
-        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'], 
+        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'],
+        'res': '2k',
+        'UDIM': False,
+        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'],
+        'disp': ['old_linoleum_flooring_01_disp_2k.png'],
+        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'],
         'rough': ['old_linoleum_flooring_01_rough_2k.jpg']
         }
         """
@@ -728,7 +767,7 @@ class MtlxMaterial:
     def _create_place2d_(self, in_material_net_node: hou.Node, in_material_info: dict):
         # UDIM纹理不创建UV缩放
         pprint.pprint(in_material_info)
-        if not in_material_info.get("UDIM",False):
+        if not in_material_info.get("UDIM", False):
             print("Create Place2D Nodes")
             nodes = {
                 "coord": in_material_net_node.createNode(
@@ -783,15 +822,46 @@ class MtlxMaterial:
             in_material_info
         ):
             print(f"Current Iterator {texture_type}")
-            texture_sampler_node=self._create_texture_sample_node_(
+            texture_sampler_node = self._create_texture_sample_node_(
                 in_material_net_node, texture_info, in_material_info
             )
-            if in_place2d_nodes and not in_material_info.get("UDIM",False):
-                #coord_index=in_place2d_nodes.inputIndex("texcoordx texcoordy")
-                #print(f"Coord_index Is {coord_index}")
-                texture_sampler_node.setInput(3,in_place2d_nodes)
-            #in_surface_node.inputIndex()
-
+            if in_place2d_nodes and not in_material_info.get("UDIM", False):
+                coord_index = texture_sampler_node.inputNames().index("texcoord")
+                texture_sampler_node.setInput(coord_index, in_place2d_nodes)
+            print(f"trying to find:{texture_type}")
+            if texture_type=="texturesDisp":
+                self._setup_displacement_connect_(
+                texture_sampler_node, in_displace_node
+            )
+                continue
+            pin_name: str = (
+                self.TEXTURE_TYPE_TO_INPUT_NAME[texture_type]["input"]
+                if self.TEXTURE_TYPE_TO_INPUT_NAME.get(texture_type, False)
+                else ""
+            )
+            if pin_name == "":
+                print(f"find none object map to {texture_type},continue")
+                continue
+            print(f"find pin {pin_name} linked to {texture_type}")
+            # pdb.set_trace()
+            connect_index = attribute_names.index(pin_name)
+            print(f"target ConnectIndex {connect_index}")
+            # 这里报错
+            self._connect_index_(
+                in_material_net_node,
+                texture_type,
+                texture_sampler_node,
+                in_surface_node,
+                in_displace_node,
+                connect_index,
+            )
+        self._setup_normal_bump_(
+            in_material_net_node,
+            in_material_info,
+            in_surface_node,
+            in_place2d_nodes,
+            attribute_names,
+        )
 
     def _surface_texture_sort_iterator_(self, in_material_info: dict):
         """
@@ -800,7 +870,17 @@ class MtlxMaterial:
         :type in_material_info: dict
         """
         # 只处理表面纹理，置换、法线等忽略
-        skip_keys = ["UDIM","Size","bump","bmp","height","displacement","displace","disp","dsp","heightmap","normal","nor","nrm","nrml","norm"]
+        skip_keys = [
+            "UDIM",
+            "Size",
+            "bump",
+            "bmp",
+            "normal",
+            "nor",
+            "nrm",
+            "nrml",
+            "norm",
+        ]
         for texture_key in in_material_info.keys():
             if texture_key in skip_keys:
                 continue
@@ -817,7 +897,7 @@ class MtlxMaterial:
 
     def _create_texture_sample_node_(
         self, in_parent_node: hou.Node, in_texture_info: dict, in_material_info: dict
-    )->hou.VopNode:
+    ) -> hou.VopNode:
         """
         创建纹理采样节点并赋值,UDIM和常规纹理使用不同采样类型
 
@@ -835,74 +915,229 @@ class MtlxMaterial:
         sample_node_class = (
             "mtlximage" if not in_material_info.get("UDIM", False) else "mtlxtiledimage"
         )
-        texture_sample_node:hou.VopNode = in_parent_node.createNode(
-            sample_node_class, in_texture_info["type"][8:] + "_sampler"
+        texture_sample_node: hou.VopNode = in_parent_node.createNode(
+            sample_node_class,
+            in_texture_info["type"][self.PREFIX_LENGTH :] + "_sampler",
         )
         print("Finish Create Node")
         # 设置路径
-        texture_path=self._get_texture_path_(in_texture_info["name"],in_material_info)
+        texture_path = self._get_texture_path_(
+            in_texture_info["name"], in_material_info
+        )
         texture_sample_node.parm("file")._set(texture_path)
         print("Finish Setting Path")
         # 设置采样节点类型
-        self._configure_texture_sample_node_(in_texture_info["type"],texture_sample_node)
+        self._configure_texture_sample_node_(
+            in_texture_info["type"], texture_sample_node
+        )
         print("Finish configure Node")
         return texture_sample_node
 
-    def _get_texture_path_(self,in_texture_name:str,in_material_info:dict)->str:
-        '''
+    def _get_texture_path_(self, in_texture_name: str, in_material_info: dict) -> str:
+        """
         返回纹理路径,主要用于tx文件的处理
         :param in_texture_name: 原dict中纹理key
         :type in_texture_name: str
         :param in_material_info: 原dict
         :type in_material_info: dict
         {
-        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'], 
-        'res': '2k', 
-        'UDIM': False, 
-        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'], 
-        'disp': ['old_linoleum_flooring_01_disp_2k.png'], 
-        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'], 
+        'ao': ['old_linoleum_flooring_01_ao_2k.jpg'],
+        'res': '2k',
+        'UDIM': False,
+        'diff': ['old_linoleum_flooring_01_diff_2k.jpg'],
+        'disp': ['old_linoleum_flooring_01_disp_2k.png'],
+        'nor': ['old_linoleum_flooring_01_nor_gl_2k.jpg'],
         'rough': ['old_linoleum_flooring_01_rough_2k.jpg']
         }
-        
-        '''
-        file_name=in_material_info[in_texture_name][0]
+
+        """
+        file_name = in_material_info[in_texture_name][0]
         # inmaterialinfo中只有文件信息，没有路径信息
         if self.b_mtlTX:
-            file_name_without_extension=file_name.split(".")[0]
-            file_name=file_name_without_extension+".tx"
-        if in_material_info.get("UDIM",True):
-            file_name=re.sub(r"\d{4}","<UDIM>",file_name)
-        file_path=os.path.join(self.tex_folder_path,file_name).replace(os.sep,"/")
+            file_name_without_extension = file_name.split(".")[0]
+            file_name = file_name_without_extension + ".tx"
+        if in_material_info.get("UDIM", True):
+            file_name = re.sub(r"\d{4}", "<UDIM>", file_name)
+        file_path = os.path.join(self.tex_folder_path, file_name).replace(os.sep, "/")
         print(f"Finish Setting Path,Targte Path:{file_path}")
         return file_path
-        
-    def _configure_texture_sample_node_(self,_in_texture_type_:str,in_sample_node:hou.OpNode):
+
+    def _configure_texture_sample_node_(
+        self, _in_texture_type_: str, in_sample_node: hou.OpNode
+    ):
         if not in_sample_node:
             print("Config Node Failed,The Node Doesn't Exist")
             return
-        sample_model="float"
-        color_space="raw"
+        sample_model = "float"
+        color_space = "raw"
         # 对于BaseColor和次表面散射使用Color3 SRGB
-        if _in_texture_type_ in("texturesColor","texturesSSS"):
-            sample_model="color3"
-            color_space="srgb_texture"
+        if _in_texture_type_ in ("texturesColor", "texturesSSS"):
+            sample_model = "color3"
+            color_space = "srgb_texture"
         in_sample_node.parm("signature")._set(sample_model)
         in_sample_node.parm("filecolorspace")._set(color_space)
+
+    def _setup_ordinary_connect_(
+        self,
+        in_parent_node: hou.Node,
+        in_texture_type: str,
+        in_texture_sample_node: hou.Node,
+        in_surface_node: hou.Node,
+        in_connect_index: int,
+    ):
+        bis_color_type: bool = in_texture_type in ("texturesColor", "texturesSSS")
+        range_node_name = in_texture_type[self.PREFIX_LENGTH :] + (
+            "_CC" if bis_color_type else "_ADJ"
+        )
+        range_node = in_parent_node.createNode("mtlxrange", range_node_name)
+        range_node.setInput(0, in_texture_sample_node)
+        if bis_color_type:
+            range_node.parm("signature")._set("color3")
+            if in_texture_type == "texturesSSS":
+                in_surface_node.parm("subsurface")._set(1)
+        if in_texture_type == "texturesGloss":
+            range_node.parm("outlow")._set(1)
+            range_node.parm("outhigh")._set(0)
+        in_surface_node.setInput(in_connect_index, range_node)
+
+    def _setup_direct_connect(
+        self,
+        in_texture_sample_node: hou.Node,
+        in_surface_node: hou.Node,
+        in_connect_index: int,
+    ):
+        in_surface_node.setInput(in_connect_index, in_texture_sample_node)
+
+    def _setup_mask_connect(
+        self,
+        in_parent_node: hou.Node,
+        in_texture_type: str,
+        in_texture_sample_node: hou.Node,
+        in_surface_node: hou.Node,
+    ):
+        in_parent_node.createNode(
+            "mtlxseoarate3c", in_texture_type[self.PREFIX_LENGTH :] + "_SPLIT"
+        )
+        in_surface_node.setInput(0, in_texture_sample_node)
+
+    def _setup_displacement_connect_(
+        self,
+        in_texture_sample_node: hou.Node,
+        in_dispalcement_node: hou.Node,
+    ):
+        print(f"try Connect Displacement,from {in_texture_sample_node.path()} to {in_dispalcement_node.path}")
+        in_dispalcement_node.setInput(0, in_texture_sample_node)
+
+    def _connect_index_(
+        self,
+        in_parent_node: hou.Node,
+        in_texture_type: str,
+        in_texture_sample_node: hou.Node,
+        in_surface_node: hou.Node,
+        in_displacement_node: hou.Node,
+        in_connect_index: int,
+    ):
+
+        if in_texture_type in self.TEXTURE_TYPE_TO_INPUT_NAME.keys():
+            print(
+                f"Find Input Pin for{in_texture_type} is {self.TEXTURE_TYPE_TO_INPUT_NAME[in_texture_type]['input']} In Map"
+            )
+            # input_pin_name: str = self.tex_folder_path[in_texture_type]["input"]
+            # input_pin_index=in_all_input_names.index(input_pin_name)
+            self.TEXTURE_TYPE_TO_INPUT_NAME[in_texture_type]["setup"](
+                in_parent_node,
+                in_texture_type,
+                in_texture_sample_node,
+                in_surface_node,
+                in_connect_index,
+            )
+        # mask和user
+        elif in_texture_type == "textureExtra":
+            self._setup_mask_connect(
+                in_parent_node, in_texture_type, in_texture_sample_node, in_surface_node
+            )
+            print(
+                f"Material {in_surface_node.path()} contains UNCONNECTED mask texture pin"
+            )
+
+    def _setup_normal_bump_(
+        self,
+        in_material_net_node: hou.Node,
+        in_material_info: dict,
+        in_surface_node: hou.Node,
+        in_place2d_nodes,
+        in_all_surface_pin_name: list,
+    ):
+        print("GetIn Process normal and bump")
+        normal_and_bump_type = {
+            "texturesBump": ["bump", "bmp", "height"],
+            "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
+        }
+        search_result = {"texturesBump": None, "texturesNormal": None}
+
+        
+        # 这段逻辑可以优化
+        for texture_name in in_material_info.keys():
+            for texture_type, keyword in normal_and_bump_type.items():
+                if texture_name in keyword:
+                    search_result[texture_type] = texture_name
+
+        
+        #pdb.set_trace()
+        bis_UDIM = in_material_info.get("UDIM", False)
+        node_type = "mtlximage" if not bis_UDIM else "mtlxtiledimage"
+        normal_pin_index = in_all_surface_pin_name.index("normal")
+
+        if not any(search_result.values()):
+            return
+
+        def _create_bump_():
+            bump_node = in_material_net_node.createNode("mtlxbump", "mtlxBump")
+            bump_image = in_material_net_node.createNode(node_type, "Bump_sampler")
+            bump_image.parm("signature")._set("float")
+            bump_image.parm("filecolorspace")._set("raw")
+            bump_image_path = self._get_texture_path_(
+                search_result["texturesBump"], in_material_info
+            )
+            bump_image.parm("file").set(bump_image_path)
+            if in_place2d_nodes and not bis_UDIM:
+                coord_index = bump_image.inputNames().index("texcoord")
+                bump_image.setInput(coord_index, in_place2d_nodes)
+            bump_node.setInput(0, bump_image)
+            return bump_node
+
+        def _create_nomal_():
+            normal_node = in_material_net_node.createNode("mtlxnormalmap", "mtlxNormal")
+            normal_image = in_material_net_node.createNode(node_type, "Normal_sampler")
+            normal_image.parm("signature")._set("vector3")
+            normal_image.parm("filecolorspace")._set("raw")
+            normal_path = self._get_texture_path_(
+                search_result["texturesNormal"], in_material_info
+            )
+            normal_image.parm("file").set(normal_path)
+            if in_place2d_nodes and not bis_UDIM:
+                coord_index = normal_image.inputNames().index("texcoord")
+                normal_image.setInput(coord_index, in_place2d_nodes)
+            normal_node.setInput(0, normal_image)
+            return normal_node
+
+        bump_nodes = None
+        normal_nodes = None
+        if search_result["texturesBump"]:
+            bump_nodes = _create_bump_()
+            in_surface_node.setInput(normal_pin_index, bump_nodes)
+        if search_result["texturesNormal"]:
+            normal_nodes = _create_nomal_()
+
+        if bump_nodes and normal_nodes:
+            input_index = bump_nodes.inputNames().index("normal")
+            bump_nodes.setInput(input_index, normal_nodes)
+            return
+        elif normal_nodes:
+            in_surface_node.setInput(normal_pin_index, normal_nodes)
+        return
+
 
 def ShowTexToMatTool():
     window_gui = TxToMtlx()
     window_gui.show()
-
-
-# def _iterate_textures(self, material_lib_info):
-#     skip_keys =['UDIM''Size','normal','nor''nrm','nrml','norm','bump','bmp','height','displace']
-#     for texture in material_lib_info:
-#         if texture in skip_keys:
-#             continue
-#         for texture_type, variants in self.TEXTURE_TYPE_SORTED.items():
-#             if any(variant in texture.lower() for variant in variants):
-#                 texture_info = {'name':texture,
-#                                 'file': material_lib_info[texture][0],
-#                                 'type':texture_type}
-#                 yield texture_type, texture_info
