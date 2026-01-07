@@ -3,6 +3,12 @@ import os
 import re
 import pprint
 import pdb
+import subprocess
+import time
+import logging
+import threading
+
+from concurrent.futures import ThreadPoolExecutor,as_completed
 from collections import defaultdict
 from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
 
@@ -102,9 +108,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         self._setup_connections()
 
         self.material_lib_path = None
-        self.material_lib_node: hou.OpNode = hou.node(
-            "/obj/lopnet1/materiallibrary1"
-        )  # <---------Remove After Test
+        self.material_lib_node: hou.OpNode = None
         # 用户选择的纹理文件夹路径
         self.tex_folder: str = ""
         self.tex_collection: dict = {}
@@ -133,7 +137,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
         # OPEN FOLDER
         self.bt_open_folder = QtWidgets.QPushButton("Open Folder")
         self.bt_open_folder.setMinimumHeight(40)
-        self.bt_open_folder.setEnabled(True)  # <---------False After Test
+        self.bt_open_folder.setEnabled(False)
         self.material_layout.addWidget(self.bt_open_folder, 1, 1)
 
         self.main_layout.addLayout(self.material_layout)
@@ -242,6 +246,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
             return
         # 启用下一步配置
         self.bt_open_folder.setEnabled(True)
+        self.checkbox.setEnabled(True)
 
     def _open_file_browser_(self):
         """
@@ -285,11 +290,11 @@ class TxToMtlx(QtWidgets.QMainWindow):
             if not os.path.isfile(current_testing_path):
                 continue
             if elem.endswith(self.SUPPORT_IMAGE_FORMAT):
-                print(
-                    f"Find Image File In Given Path {in_dir_path},Image File Name {elem}"
-                )
+                # print(
+                #     f"Find Image File In Given Path {in_dir_path},Image File Name {elem}"
+                # )
                 if "_" in elem:
-                    print(f"Image File Name {elem} with Underscore Seperator")
+                    #print(f"Image File Name {elem} with Underscore Seperator")
                     return True
         return False
 
@@ -338,7 +343,10 @@ class TxToMtlx(QtWidgets.QMainWindow):
         return result
 
     def _change_use_mtlTX_(self, status):
-        if status == QtCore.Qt.CheckState.Checked:
+        print(f"{status} ,{QtCore.Qt.CheckState.Checked.value}")
+        if status == QtCore.Qt.CheckState.Checked.value:
+        #if status == 2:
+            print("Checkbox Checked")
             self.mtlTX = True
         else:
             self.mtlTX = False
@@ -408,6 +416,7 @@ class MtlxMaterial:
         self.tex_folder_path = tex_folder_path
         self.texture_list = texture_list
         self._init_constants()
+        self.setup_imaketx()
 
     def _init_constants(self):
         self.TEXTURE_TYPE_SORTED = {
@@ -473,7 +482,11 @@ class MtlxMaterial:
                 "setup": self._setup_ordinary_connect_,
             },
         }
+        'texturesXXXX中textures的长度,用于截取名称'
         self.PREFIX_LENGTH: int = 8
+
+        self.MAX_WORK_PROCESS=os.cpu_count()
+        self.PROCESS_USE_LIMIT=round(max(1.0,int(self.MAX_WORK_PROCESS)*0.8))
 
     def create_material(self):
         if not (self.node_ref and self.mat_name and self.texture_list):
@@ -491,7 +504,7 @@ class MtlxMaterial:
             )
             # UV缩放，内部UDIM短路
             place2d_nodes = self._create_place2d_(subnet_context, target_material_info)
-            print(target_material_info)
+            #print(target_material_info)
             # 处理纹理
             self._process_textures_(
                 subnet_context,
@@ -528,8 +541,86 @@ class MtlxMaterial:
                 if key not in ("UDIM", "Size"):
                     if isinstance(value, list):
                         texture_summary.extend(value)
+            if len(texture_summary)>0:
+                print(f"Prepare to convert {len(texture_summary)} textures")
+                self._convert_to_TX_(texture_summary)
         # 执行TX转换操作
         return target_material_info
+
+    def setup_imaketx(self):
+        imaketx_tool="imaketx.exe"
+        self.imaketx_path=None
+        houdini_path=hou.text.expandString("$HB")
+
+        if not os.path.exists(houdini_path):
+            raise RuntimeError("Fail To Find Houdini Path ,Please Set imaketx.exe path Manually")
+            return
+        self.imaketx_path=os.path.join(houdini_path,imaketx_tool).replace(os.sep,"/")
+        if not os.path.exists(self.imaketx_path):
+            raise RuntimeError("Fail To Find Houdini Path ,Please Set imaketx.exe path Manually")
+        return
+
+    def _convert_to_TX_(self,in_texture_array:list):
+        if self.b_mtlTX==False:
+            return
+        # 定义记录器
+        logging.basicConfig(level=logging.INFO)
+        logger=logging.getLogger("TX Convertion")
+        # 定义子任务
+        def single_convert_task(in_single_image_path:str):
+            thread_id=threading.current_thread().ident
+            start_time=time.time()
+            try:
+                logger.info(f"Thread {thread_id}:Starting Convert {os.path.basename(in_single_image_path)}")
+                # 设置输入输出调用"inputPath" "outputPath" "Param"
+                output_path=os.path.splitext(in_single_image_path)[0]+".tx"
+                command=f'"{self.imaketx_path}" "{in_single_image_path}" "{output_path}" --newer'
+                result=subprocess.run(command,shell=True,capture_output=True,text=True)
+
+                end_time=time.time()
+                duration=round(end_time-start_time,2)
+                if result.returncode==0:
+                    logger.info(f"Thread {thread_id}:Completed Convert {os.path.basename(in_single_image_path)} in {duration}")
+                    return True
+                else:
+                    logger.error(f"Thread {thread_id}:Failed to Convert {os.path.basename(in_single_image_path)} in {duration}")
+                    return False
+            except Exception as error:
+                logger.error(f"Thread {thread_id}:Failed to Convert {os.path.basename(in_single_image_path)},Reason:{error}")
+                return False
+
+        # 调用执行
+        texture_paths=[]
+        for single_texture in in_texture_array:
+            texture_paths.append(os.path.join(self.tex_folder_path,single_texture).replace(os.sep,"/"))
+        texture_count=float(len(texture_paths))
+        convert_start_time=time.time()
+        completed=0
+        failed=0
+        with ThreadPoolExecutor(max_workers=self.PROCESS_USE_LIMIT) as executor:
+            future_texture={}
+            for path in texture_paths:
+                future_texture[executor.submit(single_convert_task,path)]=path
+                #这部分被遍历过的不会移除
+                fail_count=0
+                current_finished=0
+                for finished in as_completed(future_texture):
+                    texture_path=future_texture[finished]
+                    current_finished+=1
+                    try:
+                        if not finished.result():
+                            fail_count+=1
+                    except Exception as error:
+                        logger.error(f"Error Processing {os.path.basename(texture_path)}:{str(error)}")
+                        failed+=1
+                process=((current_finished)*1.0/texture_count)*100
+                logger.info(f"Progress:{process}% ({current_finished}/{texture_count})")
+                failed=fail_count
+                completed=current_finished-failed
+        convert_end_time=time.time()
+        total_time=round(convert_end_time-convert_start_time,2)
+        logger.info(f"Finish Convert {texture_count} Texture, Use {total_time} s ,Success Count: {completed},Failed {failed}")
+        return completed>0 and failed==0
 
     def _create_material_subnet_(self, in_material_info: dict):
         """
@@ -548,15 +639,15 @@ class MtlxMaterial:
         if duplicated_node:
             duplicated_node.destroy()
         # 创建新的节点
-        print("Type of Parent Node")
-        print(type(self.node_ref))
-        print(self.node_ref.path())
+        # print("Type of Parent Node")
+        # print(type(self.node_ref))
+        # print(self.node_ref.path())
         material_node = self.node_ref.createNode("subnet", material_node_name)
         # 这两个函数返回值一样都是Node
         # subnet_as_opnode = material_node
         subnet_as_opnode = self.node_ref.node(material_node.name())
-        print("Type of CreatedNode")
-        print(type(subnet_as_opnode))
+        # print("Type of CreatedNode")
+        # print(type(subnet_as_opnode))
         # 删除不需要使用的输入输出
         old_interface = subnet_as_opnode.allItems()
         for index, _ in enumerate(old_interface):
@@ -766,9 +857,9 @@ class MtlxMaterial:
 
     def _create_place2d_(self, in_material_net_node: hou.Node, in_material_info: dict):
         # UDIM纹理不创建UV缩放
-        pprint.pprint(in_material_info)
+        #pprint.pprint(in_material_info)
         if not in_material_info.get("UDIM", False):
-            print("Create Place2D Nodes")
+            #print("Create Place2D Nodes")
             nodes = {
                 "coord": in_material_net_node.createNode(
                     "mtlxtexcoord", f"{self.mat_name}_texcoord"
@@ -816,23 +907,23 @@ class MtlxMaterial:
         :param in_displace_node: 先前创建的displacement纹理attribute节点
         :param in_place2d_nodes: 先前创建的UVTranslation节点
         """
-        print("Get In Process texture")
+        #print("Get In Process texture")
         attribute_names = in_surface_node.inputNames()
         for texture_type, texture_info in self._surface_texture_sort_iterator_(
             in_material_info
         ):
-            print(f"Current Iterator {texture_type}")
+            #print(f"Current Iterator {texture_type}")
             texture_sampler_node = self._create_texture_sample_node_(
                 in_material_net_node, texture_info, in_material_info
             )
             if in_place2d_nodes and not in_material_info.get("UDIM", False):
                 coord_index = texture_sampler_node.inputNames().index("texcoord")
                 texture_sampler_node.setInput(coord_index, in_place2d_nodes)
-            print(f"trying to find:{texture_type}")
-            if texture_type=="texturesDisp":
+            #print(f"trying to find:{texture_type}")
+            if texture_type == "texturesDisp":
                 self._setup_displacement_connect_(
-                texture_sampler_node, in_displace_node
-            )
+                    texture_sampler_node, in_displace_node
+                )
                 continue
             pin_name: str = (
                 self.TEXTURE_TYPE_TO_INPUT_NAME[texture_type]["input"]
@@ -840,13 +931,12 @@ class MtlxMaterial:
                 else ""
             )
             if pin_name == "":
-                print(f"find none object map to {texture_type},continue")
+                #print(f"find none object map to {texture_type},continue")
                 continue
-            print(f"find pin {pin_name} linked to {texture_type}")
+            #print(f"find pin {pin_name} linked to {texture_type}")
             # pdb.set_trace()
             connect_index = attribute_names.index(pin_name)
-            print(f"target ConnectIndex {connect_index}")
-            # 这里报错
+            #print(f"target ConnectIndex {connect_index}")
             self._connect_index_(
                 in_material_net_node,
                 texture_type,
@@ -908,9 +998,9 @@ class MtlxMaterial:
         :param in_material_info: 原始材质信息
         :type in_material_info: dict
         """
-        print("Call Create Texture Sample")
+        #print("Call Create Texture Sample")
         if not in_parent_node:
-            print("Create Texture Sample Node Failed,Invalid Input")
+            #print("Create Texture Sample Node Failed,Invalid Input")
             return
         sample_node_class = (
             "mtlximage" if not in_material_info.get("UDIM", False) else "mtlxtiledimage"
@@ -919,18 +1009,18 @@ class MtlxMaterial:
             sample_node_class,
             in_texture_info["type"][self.PREFIX_LENGTH :] + "_sampler",
         )
-        print("Finish Create Node")
+        #print("Finish Create Node")
         # 设置路径
         texture_path = self._get_texture_path_(
             in_texture_info["name"], in_material_info
         )
         texture_sample_node.parm("file")._set(texture_path)
-        print("Finish Setting Path")
+        #print("Finish Setting Path")
         # 设置采样节点类型
         self._configure_texture_sample_node_(
             in_texture_info["type"], texture_sample_node
         )
-        print("Finish configure Node")
+        #print("Finish configure Node")
         return texture_sample_node
 
     def _get_texture_path_(self, in_texture_name: str, in_material_info: dict) -> str:
@@ -959,14 +1049,14 @@ class MtlxMaterial:
         if in_material_info.get("UDIM", True):
             file_name = re.sub(r"\d{4}", "<UDIM>", file_name)
         file_path = os.path.join(self.tex_folder_path, file_name).replace(os.sep, "/")
-        print(f"Finish Setting Path,Targte Path:{file_path}")
+        #print(f"Finish Setting Path,Targte Path:{file_path}")
         return file_path
 
     def _configure_texture_sample_node_(
         self, _in_texture_type_: str, in_sample_node: hou.OpNode
     ):
         if not in_sample_node:
-            print("Config Node Failed,The Node Doesn't Exist")
+            #print("Config Node Failed,The Node Doesn't Exist")
             return
         sample_model = "float"
         color_space = "raw"
@@ -1025,7 +1115,9 @@ class MtlxMaterial:
         in_texture_sample_node: hou.Node,
         in_dispalcement_node: hou.Node,
     ):
-        print(f"try Connect Displacement,from {in_texture_sample_node.path()} to {in_dispalcement_node.path}")
+        # print(
+        #     f"try Connect Displacement,from {in_texture_sample_node.path()} to {in_dispalcement_node.path}"
+        # )
         in_dispalcement_node.setInput(0, in_texture_sample_node)
 
     def _connect_index_(
@@ -1039,9 +1131,9 @@ class MtlxMaterial:
     ):
 
         if in_texture_type in self.TEXTURE_TYPE_TO_INPUT_NAME.keys():
-            print(
-                f"Find Input Pin for{in_texture_type} is {self.TEXTURE_TYPE_TO_INPUT_NAME[in_texture_type]['input']} In Map"
-            )
+            # print(
+            #     f"Find Input Pin for{in_texture_type} is {self.TEXTURE_TYPE_TO_INPUT_NAME[in_texture_type]['input']} In Map"
+            # )
             # input_pin_name: str = self.tex_folder_path[in_texture_type]["input"]
             # input_pin_index=in_all_input_names.index(input_pin_name)
             self.TEXTURE_TYPE_TO_INPUT_NAME[in_texture_type]["setup"](
@@ -1056,9 +1148,9 @@ class MtlxMaterial:
             self._setup_mask_connect(
                 in_parent_node, in_texture_type, in_texture_sample_node, in_surface_node
             )
-            print(
-                f"Material {in_surface_node.path()} contains UNCONNECTED mask texture pin"
-            )
+            # print(
+            #     f"Material {in_surface_node.path()} contains UNCONNECTED mask texture pin"
+            # )
 
     def _setup_normal_bump_(
         self,
@@ -1068,22 +1160,20 @@ class MtlxMaterial:
         in_place2d_nodes,
         in_all_surface_pin_name: list,
     ):
-        print("GetIn Process normal and bump")
+        #print("GetIn Process normal and bump")
         normal_and_bump_type = {
             "texturesBump": ["bump", "bmp", "height"],
             "texturesNormal": ["normal", "nor", "nrm", "nrml", "norm"],
         }
         search_result = {"texturesBump": None, "texturesNormal": None}
 
-        
         # 这段逻辑可以优化
         for texture_name in in_material_info.keys():
             for texture_type, keyword in normal_and_bump_type.items():
                 if texture_name in keyword:
                     search_result[texture_type] = texture_name
 
-        
-        #pdb.set_trace()
+        # pdb.set_trace()
         bis_UDIM = in_material_info.get("UDIM", False)
         node_type = "mtlximage" if not bis_UDIM else "mtlxtiledimage"
         normal_pin_index = in_all_surface_pin_name.index("normal")
