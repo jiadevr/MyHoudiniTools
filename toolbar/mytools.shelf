@@ -11,6 +11,8 @@
     <memberTool name="projectmanager"/>
     <memberTool name="scene_cache_manager"/>
     <memberTool name="tex_to_material"/>
+    <memberTool name="BatchMeshImporter"/>
+    <memberTool name="split Geos"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -37,5 +39,15 @@ tools.CacheManager.ShowSceneCacheWidget()]]></script>
     <script scriptType="python"><![CDATA[import tools.tex_to_mtlx
 
 tools.tex_to_mtlx.ShowTexToMatTool()]]></script>
+  </tool>
+
+  <tool name="BatchMeshImporter" label="BatchMeshImporter" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.batchImport
+tools.batchImport.batchImport()]]></script>
+  </tool>
+
+  <tool name="split Geos" label="SplitGeo" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.SplitGeo
+tools.SplitGeo.SplitGeo()]]></script>
   </tool>
 </shelfDocument>

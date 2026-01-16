@@ -17,7 +17,7 @@ class TxToMtlx(QtWidgets.QMainWindow):
 
     SUPPORT_IMAGE_FORMAT = (
         ".jpg",
-        ".jpge",
+        ".jpeg",
         ".png",
         ".bmp",
         ".tif",
