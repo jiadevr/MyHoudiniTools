@@ -9,12 +9,33 @@ class State(object):
         print(kwargs)
         self.scene_viewer:hou.SceneViewer=kwargs["scene_viewer"]
         self.node=hou.node("/obj")
-        self.light:hou.OpNode
+        self.light=None
         self.light_distance=1.0
 
+        self.hit_location:hou.Vector3
         self.light_dir:hou.Vector3
         self.light_position:hou.Vector3
 
+        self.guide_line_container=hou.GeometryDrawable(scene_viewer=self.scene_viewer, geo_type=hou.drawableGeometryType.Line, name="light_guide_line")
+        self.guide_line_container.show(False)
+
+    def _create_guide_line_geo_(self):
+        '''
+        创建灯光用于Debug的几何体
+        '''
+        # 先做基础检查
+        if not self.light or not self.hit_location:
+            return
+        # 获取点的两端 self.hit_location,
+        light_location=hou.Vector3(self.light.worldTransform().extractTranslates())
+
+        # 构造线几何体
+        guide_line_geo=hou.Geometry()
+        points=[]
+        points.append(guide_line_geo.createPoints([self.hit_location,light_location]))
+        guide_line_geo.createPolygons(points,False)
+
+        self.guide_line_container.setGeometry(guide_line_geo)
 
     def onEnter(self, kwargs):
         """Called on node bound states when it starts"""
@@ -23,6 +44,7 @@ class State(object):
     def onExit(self, kwargs):
         """Called when the state terminates"""
         state_parms = kwargs["state_parms"]
+        self.guide_line_container.show(False)
 
     def onInterrupt(self, kwargs):
         """Called when the state is interrupted e.g when the mouse
@@ -32,6 +54,7 @@ class State(object):
 
     def onResume(self, kwargs):
         """Called when an interrupted state resumes"""
+        self.guide_line_container.show(True)
         pass
 
     def _get_light_position_by_reflection_(self,in_current_viewport:hou.GeometryViewport,in_mouse_x:int,in_mouse_y:int)->bool:
@@ -54,7 +77,7 @@ class State(object):
 
         primitive_number,hit_position_local,hit_normal_local,uvw_coordinates=su.sopGeometryIntersection(geo_object,mouse_position_local,view_dir_local)
         # 转换回世界坐标
-        hit_position=hit_position_local*obj_transform
+        self.hit_location=hit_position_local*obj_transform
         hit_normal=hit_normal_local.multiplyAsDir(obj_transform).normalized()
 
         # 计算反射方向https://zhuanlan.zhihu.com/p/555451478
@@ -62,7 +85,7 @@ class State(object):
 
         # 上面是以相机为射源计算方向，实际应该反过来
         self.light_dir=-reflect_dir
-        self.light_position=hit_position+(self.light_dir*self.light_distance)
+        self.light_position=self.hit_location+(self.light_dir*self.light_distance)
 
         return True
 
@@ -73,20 +96,22 @@ class State(object):
         dev:hou.UIEventDevice = ui_event.device()
         # 在窗口下方显示提示文字
         self.scene_viewer.setPromptMessage("Chick with LMB or Press and Drag LMB to Place Light")
-
-        if self.light:
-            # 获取当前视口
-            current_viewport:hou.GeometryViewport= self.scene_viewer.curViewport()
-            # 鼠标左键按下或者按下+拖拽
-            if mouse_operation==hou.uiEventReason.Picked or mouse_operation==hou.uiEventReason.Active:
+        if mouse_operation==hou.uiEventReason.Picked or mouse_operation==hou.uiEventReason.Active:
+            if self.light:
+                # 获取当前视口
+                current_viewport:hou.GeometryViewport= self.scene_viewer.curViewport()
+                # 鼠标左键按下或者按下+拖拽
+                
                 bsuccess:bool=self._get_light_position_by_reflection_(current_viewport,int(dev.mouseX()),int(dev.mouseY()))
 
                 if bsuccess:
                     light_matrix=hou.hmath.buildRotateZToAxis(self.light_dir)
                     light_matrix*=hou.hmath.buildTranslate(self.light_position)
                     self.light.setWorldTransform(light_matrix)
-                    return True
 
+                    self._create_guide_line_geo_()
+                    self.guide_line_container.show(True)
+                    return True
         return False
 
     def onMouseWheelEvent(self, kwargs):
@@ -120,6 +145,19 @@ class State(object):
         """
         draw_handle = kwargs["draw_handle"]
 
+        draw_parms={
+            "color1":(0.5,0.85,0.25,0.85),
+            "fade_factor":1.0,
+            "style":hou.drawableGeometryLineStyle.Dot2,
+            "glow_width":2,
+            "line_width":5,
+            "highlight_mode":hou.drawableHighlightMode.Matte,
+            "use_cd":True,
+            "use_uv":True
+        }
+    
+        self.guide_line_container.draw(draw_handle,draw_parms)
+
     def onSelection(self, kwargs):
         """Called when a selector has selected something"""
         selection = kwargs["selection"]
@@ -130,7 +168,7 @@ class State(object):
             print(f"Can not handle Multi or None Selection,{selection}")
             return False
         
-        if selector_name=="light_selection":
+        if selector_name=="light_selection" and selection[0]:
             self.light=selection[0]
             #hou.ui.displayMessage(f"Select Light: {self.light.name()}",severity=hou.severityType.Message)
         #if selection
