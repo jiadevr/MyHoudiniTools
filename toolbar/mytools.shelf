@@ -13,6 +13,7 @@
     <memberTool name="tex_to_material"/>
     <memberTool name="BatchMeshImporter"/>
     <memberTool name="split Geos"/>
+    <memberTool name="highlightplacer"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -49,5 +50,10 @@ tools.batchImport.batchImport()]]></script>
   <tool name="split Geos" label="SplitGeo" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[import tools.SplitGeo
 tools.SplitGeo.SplitGeo()]]></script>
+  </tool>
+
+  <tool name="highlightplacer" label="Adjust Light with Visual Debugger" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[scene_viewer=hou.ui.paneTabOfType(hou.paneTabType.SceneViewer)
+scene_viewer.setCurrentState("_place_light")]]></script>
   </tool>
 </shelfDocument>
