@@ -59,12 +59,12 @@ class State(object):
 
     def _get_light_position_by_reflection_(self,in_current_viewport:hou.GeometryViewport,in_mouse_x:int,in_mouse_y:int)->bool:
         trace_object=in_current_viewport.queryNodeAtPixel(in_mouse_x,in_mouse_y)
-        obj_transform:hou.Matrix4=trace_object.worldTransform()
+        
         # 忽略空对象和灯光对象
         ignore_nodes=["hlight::2.0"]
         if not trace_object or trace_object.type() in ignore_nodes:
             return False
-        
+        obj_transform:hou.Matrix4=trace_object.worldTransform()
         # trace到的几何体,不要从这里拿transform，没有这个属性
         geo_object=trace_object.displayNode().geometry()
         
@@ -119,6 +119,19 @@ class State(object):
 
         ui_event = kwargs["ui_event"]
         state_parms = kwargs["state_parms"]
+
+        device=ui_event.device()
+        scroll_value=device.mouseWheel()
+        delta_value=scroll_value/10.0
+        if self.light:
+            
+            self.light_distance=max(1.0,self.light_distance+delta_value)
+            self.light_position=self.hit_location+(self.light_dir*self.light_distance)
+            light_matrix=hou.hmath.buildRotateZToAxis(self.light_dir)
+            light_matrix*=hou.hmath.buildTranslate(self.light_position)
+            self.light.setWorldTransform(light_matrix)
+
+            self._create_guide_line_geo_()
 
         # Must return True to consume the event
         return False
