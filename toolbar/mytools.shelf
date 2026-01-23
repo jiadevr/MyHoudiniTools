@@ -14,6 +14,7 @@
     <memberTool name="BatchMeshImporter"/>
     <memberTool name="split Geos"/>
     <memberTool name="highlightplacer"/>
+    <memberTool name="create_usd_geo_builder"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -55,5 +56,10 @@ tools.SplitGeo.SplitGeo()]]></script>
   <tool name="highlightplacer" label="Adjust Light with Visual Debugger" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[scene_viewer=hou.ui.paneTabOfType(hou.paneTabType.SceneViewer)
 scene_viewer.setCurrentState("_place_light")]]></script>
+  </tool>
+
+  <tool name="create_usd_geo_builder" label="CreateUSDGeoBuilder" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[from tools import CreateUSDCompBuilder as lab 
+lab.create_usd_comp_builder("")]]></script>
   </tool>
 </shelfDocument>
