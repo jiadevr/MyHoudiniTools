@@ -149,7 +149,7 @@ s@name=material_name[-1];'''
 
     # proxy节点组路径
     print("Beign Proxy Generation")
-    pdb.set_trace()
+    #pdb.set_trace()
     poly_reduce_node:hou.OpNode=edit_target_node.createNode("polyreduce::2.0","reduce_poly")
     poly_reduce_node.parm("percentage")._set(5.0)
     children_nodes.append(poly_reduce_node)
@@ -187,7 +187,8 @@ s@name=material_name[-1];'''
     copy_asset_name_node.setInput(0,poly_reduce_node)
     unique_color_node.setInput(0,copy_asset_name_node)
     attri_transfor_node.setInput(0,unique_color_node)
-    proxy_output.setInput(0,attri_transfor_node)
+    clean_attri_node.setInput(0,attri_transfor_node)
+    proxy_output.setInput(0,clean_attri_node)
     print("End Proxy Generation")
 
     edit_target_node.layoutChildren(children_nodes)

@@ -270,7 +270,7 @@ def createViewerStateTemplate():
     template = hou.ViewerStateTemplate(state_typename, state_label, state_cat)
     template.bindFactory(State)
     template.bindIcon("MISC_python")
-    print("Enter Place Light")
+    #print("Enter Place Light")
     # 对象选择器
     template.bindObjectSelector(
         prompt="Select A Light",
