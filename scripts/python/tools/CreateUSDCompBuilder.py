@@ -1,5 +1,7 @@
 import hou
 import os
+import tools.tex_to_mtlx as tex_to_mtlx
+import pprint
 import pdb
 
 
@@ -26,7 +28,7 @@ def create_usd_comp_builder(in_asset_path: str):
             # 假定纹理文件在模型文件同级的map文件夹中
             parent_path, geo_file_name = os.path.split(in_asset_path)
             # 提取纹理地址和模型名称
-            image_path = os.path.join(parent_path, "map").replace(os.sep, "/")
+            image_path = os.path.join(parent_path, "maps").replace(os.sep, "/")
             geo_name = geo_file_name.split(".")[0]
             geo_extension = geo_file_name.split(".")[-1]
             # 创建componentBuilder中的其他节点
@@ -60,6 +62,9 @@ def create_usd_comp_builder(in_asset_path: str):
             # 设置模型处理
             _prepare_geo_asset_(comp_geo_node,geo_name,geo_extension,in_asset_path,output_node)
 
+            # 创建材质
+            _create_materials_(mat_lib_node,image_path)
+
             # 设置材质模型映射节点连接
             edit_subnet = mat_assign_node.node("edit")
             output_node: hou.OpNode = edit_subnet.node("output0")
@@ -78,10 +83,10 @@ def create_usd_comp_builder(in_asset_path: str):
             assign_node.setInput(0, edit_subnet.indirectInputs()[0])
             output_node.setInput(0, assign_node)
 
-        except:
-            pass
+        except Exception as error:
+            hou.ui.displayMessage(f"Fail to Create,Error {error}",severity=hou.severityType.Error)
     else:
-        hou.ui.displayMessage(f"{in_asset_path} Not Existed!")
+        hou.ui.displayMessage(f"{in_asset_path} Not Existed!",severity=hou.severityType.Error)
 
 def _prepare_geo_asset_(in_parent_node:hou.OpNode,in_geo_name:str,in_file_extension:str,in_path:str,in_out_node:hou.OpNode):
     '''
@@ -191,6 +196,88 @@ s@name=material_name[-1];'''
     proxy_output.setInput(0,clean_attri_node)
     print("End Proxy Generation")
 
-    edit_target_node.layoutChildren(children_nodes)
+    # Sim Proxy节点组路径
+    print("Begin Sim Proxy Generation")
+    convex_creator= _create_sim_proxy_(edit_target_node)
+    convex_creator.setInput(0,poly_reduce_node)
+    sim_output.setInput(0,convex_creator)
+    print("End Sim Proxy Generation")
+    edit_target_node.layoutChildren()
 
+def _create_sim_proxy_(in_parent_node:hou.OpNode)->hou.OpNode:
+    convex_creator_node:hou.OpNode= in_parent_node.createNode("python","convex_creator")
+    # 添加输入参数
+    convex_creator_ptg= convex_creator_node.parmTemplateGroup()
+    bnormalized_toggle=hou.ToggleParmTemplate(
+        name="normalize",
+        label="Normalize",
+        default_value=True
+    )
+    convex_creator_ptg.append(bnormalized_toggle)
+    
+    bfilp_normal_toggle=hou.ToggleParmTemplate(
+        name="filp_normal",
+        label="FilpNormal",
+        default_value=True
+    )
+    convex_creator_ptg.append(bfilp_normal_toggle)
 
+    bsimplify_toggle=hou.ToggleParmTemplate(
+        name="simplify_toggle",
+        label="Simplify",
+        default_value=True
+    )
+    convex_creator_ptg.append(bsimplify_toggle)
+
+    level_detail=hou.FloatParmTemplate(
+        name="level_detail",
+        label="LevelOfDetail",
+        num_components=1,
+        disable_when="{bsimplify_toggle==0}"
+    )
+    convex_creator_ptg.append(level_detail)
+
+    convex_creator_node.setParmTemplateGroup(convex_creator_ptg)
+    code='''
+import numpy as np
+'''
+    convex_creator_node.parm("python")._set(code)
+
+    return convex_creator_node
+    
+
+def _create_materials_(in_parent_node:hou.OpNode,in_tex_folder:str)->bool:
+    # 复用tex to mtlx内容
+    print("Begin Creating Material")
+    if not os.path.exists(in_tex_folder):
+        raise ValueError(f"Invalid Path {in_tex_folder}")
+        return False
+    try:
+        texture_manager= tex_to_mtlx.TxToMtlx()
+        if texture_manager._contain_any_image_file_(in_tex_folder):
+            
+            material_dict=texture_manager._collect_images_in_dir(in_tex_folder)
+            #pprint.pprint(material_dict)
+            if len(material_dict)>0:
+                if not in_tex_folder.endswith("/"):
+                    in_tex_folder=in_tex_folder+"/"
+                print(in_tex_folder)
+                public_data={
+                    "b_use_mtlTX": False,
+                    "node_path": in_parent_node.path(),
+                    "node_ref": in_parent_node,
+                    "tex_folder_path": in_tex_folder,
+                }
+                #pdb.set_trace()
+                for material_name,material_data in material_dict.items():
+                    print(f"{material_name} - {material_data}")
+                    material_creator=tex_to_mtlx.MtlxMaterial(mat_name=material_name,**public_data,all_texture_dict=material_dict)
+                    material_creator.create_material()
+                print("End Creating Material")
+                return True
+        else:
+            raise ValueError(f"The Path {in_tex_folder} contains none valid texture")
+            
+    except Exception as error:
+        raise ValueError(f"Fail to create material,Error {error}")
+    return False

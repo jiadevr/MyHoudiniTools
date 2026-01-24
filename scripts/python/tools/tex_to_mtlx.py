@@ -407,14 +407,14 @@ class MtlxMaterial:
         node_path,
         node_ref: hou.OpNode,
         tex_folder_path,
-        texture_list,
+        all_texture_dict,
     ) -> None:
         self.mat_name = mat_name
         self.b_mtlTX = b_use_mtlTX
         self.node_path = node_path
         self.node_ref: hou.OpNode = node_ref
         self.tex_folder_path = tex_folder_path
-        self.texture_list = texture_list
+        self.texture_list = all_texture_dict
         self._init_constants()
         self.setup_imaketx()
 
@@ -516,7 +516,7 @@ class MtlxMaterial:
             # 节点布局
             self._layout_nodes_(subnet_context)
         except Exception as error:
-            print(f"Error:{error}")
+            print(f"Error In [create_material] :{error}")
 
     def _prepare_material_info_(self):
         """
@@ -534,18 +534,22 @@ class MtlxMaterial:
         'rough': ['old_linoleum_flooring_01_rough_2k.jpg']
         }
         """
-        target_material_info: dict = self.texture_list[self.mat_name]
-        if self.b_mtlTX:
-            texture_summary = []
-            for key, value in target_material_info.items():
-                if key not in ("UDIM", "Size"):
-                    if isinstance(value, list):
-                        texture_summary.extend(value)
-            if len(texture_summary)>0:
-                print(f"Prepare to convert {len(texture_summary)} textures")
-                self._convert_to_TX_(texture_summary)
-        # 执行TX转换操作
-        return target_material_info
+        try:
+            target_material_info: dict = self.texture_list[self.mat_name]
+            if self.b_mtlTX:
+                texture_summary = []
+                for key, value in target_material_info.items():
+                    if key not in ("UDIM", "Size"):
+                        if isinstance(value, list):
+                            texture_summary.extend(value)
+                if len(texture_summary)>0:
+                    print(f"Prepare to convert {len(texture_summary)} textures")
+                    self._convert_to_TX_(texture_summary)
+            # 执行TX转换操作
+            return target_material_info
+        except Exception as error:
+            raise RuntimeError(f"Error in [_prepare_material_info_],Error: {error}")
+            return {}
 
     def setup_imaketx(self):
         imaketx_tool="imaketx.exe"
