@@ -2,10 +2,11 @@ import hou
 import os
 import random
 import colorsys
+import voptoolutils
 import tools.tex_to_mtlx as tex_to_mtlx
 
 # import pprint
-# import pdb
+import pdb
 
 
 def create_usd_comp_builder(in_asset_path: str):
@@ -66,12 +67,16 @@ def create_usd_comp_builder(in_asset_path: str):
             output_node.setSelected(True)
 
             # 设置模型处理
-            _prepare_geo_asset_(
+            sub_comp_name_set:set=_prepare_geo_asset_(
                 comp_geo_node, geo_name, geo_extension, in_asset_path, output_node
             )
 
+
             # 创建材质
-            _create_materials_(mat_lib_node, image_path)
+            print(f"Length {len(sub_comp_name_set)} Values In set {sub_comp_name_set}")
+            material_names=tuple(sub_comp_name_set)
+            print(f"{material_names}")
+            _create_materials_(mat_lib_node, image_path,material_names)
 
             # 设置材质模型映射节点连接
             edit_subnet = mat_assign_node.node("edit")
@@ -107,7 +112,7 @@ def _prepare_geo_asset_(
     in_file_extension: str,
     in_path: str,
     in_out_node: hou.OpNode,
-):
+)->set:
     """
     预处理模型，包括位置调整、name覆盖、孤点删除、创建代理几何体、设置代理几何体颜色、创建凸包
 
@@ -116,7 +121,9 @@ def _prepare_geo_asset_(
     :param in_file_extension: 导入模型后缀名
     :param in_path: 导入路径
     :param in_out_node: stage subnet输出节点引用
+    :Return 以集合形式返回subcomponent名称
     """
+    out_sub_comp_name=set()
     # 编辑目标，把节点直接拖进shell可以看到
     edit_target_node: hou.OpNode = hou.node(in_parent_node.path() + "/sopnet/geo")
     children_nodes = []
@@ -173,6 +180,14 @@ s@name=material_name[-1];""",
     delete_attr_node.setInput(0, normalize_name_node)
     clean_isolated_point_node.setInput(0, delete_attr_node)
     default_output.setInput(0, clean_isolated_point_node)
+    
+    # 获取节点中的name属性信息
+    geo_info=clean_isolated_point_node.geometry()
+    if geo_info and geo_info.prims():
+        for prim_attrib in geo_info.prims():
+            attrib_value= prim_attrib.attribValue("name")
+            out_sub_comp_name.add(attrib_value)
+    
     print("End Default Generation")
 
     # proxy节点组路径
@@ -239,6 +254,7 @@ s@name=material_name[-1];""",
     print("End Sim Proxy Generation")
     edit_target_node.layoutChildren()
 
+    return out_sub_comp_name
 
 def _create_sim_proxy_(in_parent_node: hou.OpNode) -> hou.OpNode:
     convex_creator_node: hou.OpNode = in_parent_node.createNode(
@@ -291,12 +307,22 @@ geoutil.create_convex_cull(geo,points,bnormalize,bfilp_normal,bsimplify,lod)
     return convex_creator_node
 
 
-def _create_materials_(in_parent_node: hou.OpNode, in_tex_folder: str) -> bool:
+def _create_materials_(in_parent_node: hou.OpNode, in_tex_folder: str,in_optional_material_names:tuple) -> bool:
     # 复用tex to mtlx内容
     print("Begin Creating Material")
     if not os.path.exists(in_tex_folder):
-        raise ValueError(f"Invalid Path {in_tex_folder}")
-        return False
+        user_input= hou.ui.displayMessage(f'Find No "maps" folder in fbx file path, Would you like create empty mtlx nodes?',buttons=("Ok","Cancel"),severity=hou.severityType.Warning)
+        if user_input==0 and len(in_optional_material_names)>0:
+            print(f"Type{in_optional_material_names},Values:{in_optional_material_names}")
+            for subcomp_name in in_optional_material_names:
+                name_str=str(subcomp_name)
+                mtlx_builder=voptoolutils._setupMtlXBuilderSubnet(subnet_node=None,destination_node=in_parent_node,
+                                                                    name=f"{subcomp_name}",mask=voptoolutils.MTLX_TAB_MASK)
+            in_parent_node.layoutChildren()
+            return True
+        else:
+            raise ValueError(f"Invalid Path {in_tex_folder} and empty subcomponentlist")
+            return False
     try:
         texture_manager = tex_to_mtlx.TxToMtlx()
         if texture_manager._contain_any_image_file_(in_tex_folder):
