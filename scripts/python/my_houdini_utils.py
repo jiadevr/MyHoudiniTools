@@ -62,4 +62,9 @@ def isValidDir(path:str)->str:
         return "None"
     
 
-
+def is_in_solaris()->bool:
+    network_editor=hou.ui.curDesktop().paneTabOfType(hou.paneTabType.NetworkEditor)
+    if network_editor:
+        if network_editor.pwd().childTypeCategory().name()=="Lop":
+            return True
+    return False
