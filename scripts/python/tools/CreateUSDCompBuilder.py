@@ -1,8 +1,11 @@
 import hou
 import os
+import random
+import colorsys
 import tools.tex_to_mtlx as tex_to_mtlx
-import pprint
-import pdb
+
+# import pprint
+# import pdb
 
 
 def create_usd_comp_builder(in_asset_path: str):
@@ -56,6 +59,9 @@ def create_usd_comp_builder(in_asset_path: str):
 
             parent_subnet.layoutChildren(
                 [comp_geo_node, mat_lib_node, mat_assign_node, output_node]
+            )
+            _create_comment_node_(
+                geo_name, (comp_geo_node, mat_lib_node, mat_assign_node, output_node)
             )
             output_node.setSelected(True)
 
@@ -324,3 +330,75 @@ def _create_materials_(in_parent_node: hou.OpNode, in_tex_folder: str) -> bool:
     except Exception as error:
         raise ValueError(f"Fail to create material,Error {error}")
     return False
+
+
+def _get_random_colors_in_scheme() -> tuple[hou.Color, hou.Color]:
+    """
+    生成同一色系的两个颜色
+    :return: 返回tuple,包含两个元素,分别是主色和副色
+    :rtype: tuple[Color]
+    """
+    base_color_r = random.random() * 0.5 + 0.5
+    base_color_g = random.random() * 0.5 + 0.5
+    base_color_b = random.random() * 0.5 + 0.5
+
+    main_color = hou.Color(base_color_r, base_color_g, base_color_b)
+    h, s, v = colorsys.rgb_to_hsv(base_color_r, base_color_g, base_color_b)
+    secondary_r, secondary_g, secondary_b = colorsys.hsv_to_rgb(h, s * 0.5, v)
+    secondary_color = hou.Color(secondary_r, secondary_g, secondary_b)
+
+    return main_color, secondary_color
+
+
+def _create_comment_node_(in_asset_name: str, in_wrapped_nodes: tuple[hou.OpNode, ...]):
+    if len(in_wrapped_nodes) <= 0:
+        raise RuntimeError(
+            "Fail to Create Common Node, The Passedin Node Tuple Was Empty"
+        )
+        return
+    parent_network: hou.OpNode = in_wrapped_nodes[0].parent()
+    if not parent_network:
+        raise RuntimeError("Fail to Create Common Node, Get Parent Network Failed")
+        return
+
+    parent_comment_box = parent_network.createNetworkBox()
+
+    inner_comment_box = parent_network.createNetworkBox()
+    parent_comment_box.addItem(inner_comment_box)
+    name_sticky_node = parent_network.createStickyNote()
+    parent_comment_box.addItem(name_sticky_node)
+
+    # 添加节点组到commentBox并计算中点
+    count_reciprocal = 1.0 / len(in_wrapped_nodes)
+    nodes_centroid: hou.Vector2 = hou.Vector2((0.0,0.0))
+    for node in in_wrapped_nodes:
+        inner_comment_box.addItem(node)
+        nodes_centroid = nodes_centroid + node.position() * count_reciprocal
+
+    inner_comment_box.setPosition(nodes_centroid)
+    inner_comment_box.fitAroundContents()
+    parent_comment_box.setPosition(nodes_centroid)
+
+    nodes_bounding_size = inner_comment_box.size()
+    sticky_height = 0.75
+    name_sticky_node.setSize((nodes_bounding_size.x(), sticky_height))
+    sticky_pos: hou.Vector2 = inner_comment_box.position()
+    #位置需要调整
+    sticky_height_offset=nodes_bounding_size.y()+sticky_height+0.25
+    sticky_offset:hou.Vector2=hou.Vector2((0.0,sticky_height_offset))
+    print(sticky_offset)
+    sticky_pos=sticky_pos+sticky_offset
+    name_sticky_node.setPosition(sticky_pos)
+
+    parent_comment_box.fitAroundContents()
+
+    # 设置文字和颜色
+    parent_comment_box.setComment(in_asset_name)
+    name_sticky_node.setText(in_asset_name)
+    name_sticky_node.setTextSize(0.35)
+
+    parent_comment_box.setColor(hou.Color(0.189,0.189,0.189))
+    node_color, text_color = _get_random_colors_in_scheme()
+    inner_comment_box.setColor(node_color)
+    name_sticky_node.setColor(node_color)
+    name_sticky_node.setTextColor(text_color)
