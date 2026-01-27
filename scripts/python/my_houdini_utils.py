@@ -2,6 +2,7 @@ import hou
 import importlib
 import os
 import sys
+import loputils
 
 def reloadPackageAndModules():
     #重新加载包，对应User/Documents下的个人配置文件
@@ -68,3 +69,43 @@ def is_in_solaris()->bool:
         if network_editor.pwd().childTypeCategory().name()=="Lop":
             return True
     return False
+
+def get_prim_bounds(target_node:hou.LopNode)->dict:
+    '''
+    get Geometry Bound size in LOP stage
+    
+    :param target_node: Must be Component Output Node
+    '''
+    
+    result={
+        "min":hou.Vector3(),
+        "max":hou.Vector3(),
+        "center":hou.Vector3(),
+        "size":hou.Vector3(),
+        "bbox":None
+    }
+
+    if not is_in_solaris() or not target_node.type().name()=="componentoutput":
+        hou.ui.displayMessage("Error:not In USD lopnet or target node is not match 'componentoutput'")
+        return result
+    stage=target_node.stage()
+    if not stage:
+        return result
+    prim=stage.GetDefaultPrim()
+    if not prim or not prim.IsValid():
+        print(f"Invalid prim")
+        return result
+    bound= loputils.computePrimWorldBounds(target_node,[prim])
+    range3d=bound.GetRange()
+    min_point=hou.Vector3(range3d.GetMin())
+    max_point=hou.Vector3(range3d.GetMax())
+
+    center:hou.Vector3= min_point*0.5+max_point*0.5
+    size:hou.Vector3=max_point-min_point
+
+    result["center"]=center
+    result["size"]=size
+    result["min"]=min_point
+    result["max"]=max_point
+    result["bbox"]=bound
+    return result
