@@ -15,6 +15,7 @@
     <memberTool name="split Geos"/>
     <memberTool name="highlightplacer"/>
     <memberTool name="create_usd_geo_builder"/>
+    <memberTool name="create_preview_light"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -61,5 +62,10 @@ scene_viewer.setCurrentState("_place_light")]]></script>
   <tool name="create_usd_geo_builder" label="CreateUSDGeoBuilder" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[from tools import CreateUSDCompBuilder as lab 
 lab.create_usd_comp_builder("")]]></script>
+  </tool>
+
+  <tool name="create_preview_light" label="CreatePreviewLights" icon="PLASMA_App">
+    <script scriptType="python"><![CDATA[import tools.CreateUSDPreviewEnv as lighttool
+lighttool.create_preview_lights()]]></script>
   </tool>
 </shelfDocument>

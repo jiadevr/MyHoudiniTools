@@ -40,19 +40,19 @@ def create_preview_lights():
     max_dimension = max(size)
 
     key_light_pos = hou.Vector3(
-        center[0] - max_dimension * 1.5,
-        center[1] + max_dimension * 1.5,
-        center[2] + max_dimension * 1,
+        center[0] - max_dimension * 1,
+        center[1] + max_dimension * 1,
+        center[2] + max_dimension * 0.5,
     )
     fill_light_pos = hou.Vector3(
-        center[0] + max_dimension * 1.5,
-        center[1] + max_dimension * 1.5,
-        center[2] + max_dimension * 1,
+        center[0] + max_dimension * 1,
+        center[1] + max_dimension * 1,
+        center[2] + max_dimension * 0.5,
     )
     back_light_pos = hou.Vector3(
-        center[0] - max_dimension * 1.5,
-        center[1] + max_dimension * 1.5,
-        center[2] - max_dimension * 1,
+        center[0] - max_dimension * 1,
+        center[1] + max_dimension * 1,
+        center[2] - max_dimension * 0.5,
     )
 
     stage= hou.node("/stage")
@@ -89,7 +89,19 @@ def create_preview_lights():
     xform_node=stage.createNode("xform","lights_transform")
     nodes_to_layout.append(xform_node)
     
-    light_mixer=stage.createNode("lightmixer","light_mixer")
+    light_mixer:hou.OpNode=stage.createNode("lightmixer","light_mixer")
+    mixer_ptg=light_mixer.parmTemplateGroup()
+    settings_folder=hou.FolderParmTemplate(name="settings_folder",label="Settings",folder_type=hou.folderType.Simple)
+    settings_str=hou.StringParmTemplate(name="setting_layout",label="Layout",num_components=1)
+    settings_folder.addParmTemplate(settings_str)
+    mixer_ptg.append(settings_folder)
+    light_mixer.setParmTemplateGroup(mixer_ptg)
+    light_parm=('['+
+          '{"type": "LightItem", "path": "/lights/key_light", "prim_path": "/lights/key_light", "rgb": [55, 55, 55], "controls": ["buttons"], "contents": []},'+
+          '{"type": "LightItem", "path": "/lights/fill_light", "prim_path": "/lights/fill_light", "rgb": [55, 55, 55], "controls": ["buttons"], "contents": []},'+
+          '{"type": "LightItem", "path": "/lights/back_light", "prim_path": "/lights/back_light", "rgb": [55, 55, 55], "controls": ["buttons"], "contents": []}'+
+          ']')
+    light_mixer.parm("setting_layout")._set(light_parm)
     nodes_to_layout.append(light_mixer)
 
     graft_branch=stage.createNode("graftbranches","point_merge")
@@ -106,7 +118,7 @@ def create_preview_lights():
 
     # 设置排布
     graft_node_pos:hou.Vector2=graft_branch.moveToGoodPosition()
-    graft_node_pos=hou.Vector2(graft_node_pos.x()+4.0,graft_node_pos.y()+4.0)
+    graft_node_pos=hou.Vector2(graft_node_pos.x()-2.0,graft_node_pos.y()+2.0)
     graft_branch.setPosition(graft_node_pos)
     stage.layoutChildren(items=nodes_to_layout)
 
