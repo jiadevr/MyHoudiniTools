@@ -85,8 +85,10 @@ def get_prim_bounds(target_node:hou.LopNode)->dict:
         "bbox":None
     }
 
-    if not is_in_solaris() or not target_node.type().name()=="componentoutput":
-        hou.ui.displayMessage("Error:not In USD lopnet or target node is not match 'componentoutput'")
+    if not is_in_solaris():
+        #or not target_node.type().name()=="componentoutput"
+        
+        hou.ui.displayMessage("Error:Current Operation Not In USD lopnet or target node is not match 'componentoutput'")
         return result
     stage=target_node.stage()
     if not stage:

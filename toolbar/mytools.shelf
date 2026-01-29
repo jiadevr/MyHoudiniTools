@@ -16,6 +16,7 @@
     <memberTool name="highlightplacer"/>
     <memberTool name="create_usd_geo_builder"/>
     <memberTool name="create_preview_light"/>
+    <memberTool name="import_and_lookdev"/>
   </toolshelf>
 
   <tool name="reloadmoudles" label="ReloadModules" icon="PLASMA_App">
@@ -66,6 +67,6 @@ lab.create_usd_comp_builder("")]]></script>
 
   <tool name="create_preview_light" label="CreatePreviewLights" icon="PLASMA_App">
     <script scriptType="python"><![CDATA[import tools.CreateUSDPreviewEnv as lighttool
-lighttool.create_preview_lights()]]></script>
+lighttool.create_preview_lights(None)]]></script>
   </tool>
 </shelfDocument>

@@ -15,6 +15,8 @@ def create_usd_comp_builder(in_asset_path: str):
 
     :param in_asset_path: 目标几何体路径
     :type asset_path: str
+    Return
+        None or componentoutput Node (last node)
     """
     if in_asset_path == "":
         in_asset_path = hou.ui.selectFile(
@@ -80,7 +82,7 @@ def create_usd_comp_builder(in_asset_path: str):
 
             # 设置材质模型映射节点连接
             edit_subnet = mat_assign_node.node("edit")
-            output_node: hou.OpNode = edit_subnet.node("output0")
+            mat_output_node: hou.OpNode = edit_subnet.node("output0")
 
             assign_node: hou.OpNode = edit_subnet.createNode(
                 "assignmaterial", f"{geo_name}_assign"
@@ -94,16 +96,20 @@ def create_usd_comp_builder(in_asset_path: str):
                 }
             )
             assign_node.setInput(0, edit_subnet.indirectInputs()[0])
-            output_node.setInput(0, assign_node)
+            mat_output_node.setInput(0, assign_node)
+            print("Finish Setting Connection")
+            return output_node
 
         except Exception as error:
             hou.ui.displayMessage(
                 f"Fail to Create,Error {error}", severity=hou.severityType.Error
             )
+            return None
     else:
         hou.ui.displayMessage(
             f"{in_asset_path} Not Existed!", severity=hou.severityType.Error
         )
+        return None
 
 
 def _prepare_geo_asset_(

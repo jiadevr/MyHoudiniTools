@@ -8,31 +8,33 @@ import numpy as np
 import my_houdini_utils as utils
 
 
-def create_preview_lights():
+def create_preview_lights(in_target_node):
     """
     在当前节点创建三盏灯
+    Return:
+        None or graftbranches Node (last node)
     """
     if not utils.is_in_solaris():
         hou.ui.displayMessage(
             "Current Operation Is Not In LOPNetwork,Quit",
             severity=hou.severityType.Error,
         )
-        return
+        return None
 
-    target_node: hou.LopNode = hou.selectedNodes()[0]
+    target_node: hou.LopNode = in_target_node if in_target_node else hou.selectedNodes()[0]
 
     if not target_node:
         hou.ui.displayMessage(
             "Please Select node of 'compontent output'", severity=hou.severityType.Error
         )
-        return
+        return None
     bound_info: dict = utils.get_prim_bounds(target_node)
 
     if bound_info["bbox"] == None:
         hou.ui.displayMessage(
             f"Find Null Geo in {target_node.path()}", severity=hou.severityType.Error
         )
-        return
+        return None
 
     center = bound_info["center"]
     bound_info["center"]
@@ -121,4 +123,6 @@ def create_preview_lights():
     graft_node_pos=hou.Vector2(graft_node_pos.x()-2.0,graft_node_pos.y()+2.0)
     graft_branch.setPosition(graft_node_pos)
     stage.layoutChildren(items=nodes_to_layout)
+
+    return graft_branch
 

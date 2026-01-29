@@ -2,6 +2,8 @@ import hou
 import pdb
 from pxr import Usd, Gf, UsdGeom
 import husd.assetutils as assetutils
+import tools.CreateUSDCompBuilder as compbuilder
+import tools.CreateUSDPreviewEnv as lightbuilder
 
 
 def create_lookdev_camera():
@@ -60,7 +62,7 @@ def create_lookdev_camera():
             temp_xform = UsdGeom.Xformable(temp_camera)
             for xform_op in temp_xform.GetOrderedXformOps():
                 # 查找对象的xform忽略父级
-                #print(xform_op.GetOpName())
+                # print(xform_op.GetOpName())
                 if xform_op.GetOpName().endswith("frameToBounds"):
                     matrix = xform_op.Get()
                     print(matrix)
@@ -123,7 +125,9 @@ def _create_lookdev_prameters_(node: hou.OpNode):
     )
 
     buse_existing_camera = hou.ToggleParmTemplate(
-        name="buse_existing_camera", label="Use Existing Camera"
+        name="buse_existing_camera", 
+        label="Use Existing Camera",
+        default_value=False
     )
 
     camera_path_string = hou.StringParmTemplate(
@@ -196,6 +200,7 @@ def _create_lookdev_prameters_(node: hou.OpNode):
         num_components=1,
         default_value=(60,),
         min=30,
+        max=1000,
         disable_when="{banimate==0}",
     )
 
@@ -236,3 +241,32 @@ def _create_framed_camera_(in_stage, in_bounds, in_yaw, in_pitch, in_distance):
         offsetdistance=in_distance,
     )
     return temp_camera
+
+
+def import_mesh_and_create_lookdev():
+    """
+    整体导入
+    """
+    # 导入模型
+    component_node = compbuilder.create_usd_comp_builder("")
+    print(component_node)
+    if not component_node:
+        raise ValueError("Fail to Create Component Builder,Quit")
+        return
+    component_node.setSelected(True)
+    stage: hou.LopNetwork = hou.node("/stage")
+    python_node= stage.createNode("pythonscript", "lookdev_config")
+    code = """
+import importlib
+from tools import CreateUSDLookDev as lookdev
+
+importlib.reload(lookdev)
+lookdev.create_lookdev_camera()
+"""
+    python_node.parm("python")._set(code)
+    python_node.setInput(0,component_node)     
+    graftbranches_node = lightbuilder.create_preview_lights(python_node)
+    if not graftbranches_node:
+        raise ValueError("Fail to Create Light Env,Quit")
+        return
+    graftbranches_node.setInput(0,python_node)
